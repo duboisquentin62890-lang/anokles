@@ -31,6 +31,9 @@ db.exec(`
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'user',
     discord_id TEXT UNIQUE,
+    discord_username TEXT,
+    discord_global_name TEXT,
+    discord_avatar TEXT,
     email TEXT,
     banned INTEGER NOT NULL DEFAULT 0,
     ban_reason TEXT,
@@ -121,7 +124,51 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    number INTEGER NOT NULL,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT UNIQUE NOT NULL,
+    category TEXT NOT NULL,
+    opener_id TEXT NOT NULL,
+    opener_tag TEXT,
+    claimed_by TEXT,
+    claimed_tag TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at TEXT,
+    closed_by TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS ticket_blacklist (
+    user_id TEXT PRIMARY KEY,
+    reason TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS ticket_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id INTEGER NOT NULL,
+    author_id TEXT,
+    author_tag TEXT,
+    content TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+  );
 `);
+
+// Migrations légères : ajoute les colonnes manquantes sur une base existante.
+function ensureColumn(table, column, decl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+  }
+}
+ensureColumn('users', 'discord_username', 'TEXT');
+ensureColumn('users', 'discord_global_name', 'TEXT');
+ensureColumn('users', 'discord_avatar', 'TEXT');
 
 function wrapDb(database) {
   return {

@@ -66,8 +66,12 @@ router.get('/me', authRequired, (req, res) => {
     WHERE k.redeemed_by = ? AND k.status = 'active'
   `).all(req.user.id);
 
+  const row = db.prepare(
+    'SELECT id, username, role, discord_id, discord_username, discord_global_name, discord_avatar, email FROM users WHERE id = ?'
+  ).get(req.user.id);
+
   res.json({
-    user: {
+    user: row || {
       id: req.user.id,
       username: req.user.username,
       role: req.user.role,
@@ -155,6 +159,9 @@ router.get('/discord/callback', async (req, res) => {
     if (!meRes.ok) throw new Error('user fetch failed');
     const discordUser = await meRes.json();
     const discordId = String(discordUser.id);
+    const avatarUrl = discordUser.avatar
+      ? `https://cdn.discordapp.com/avatars/${discordId}/${discordUser.avatar}.${discordUser.avatar.startsWith('a_') ? 'gif' : 'png'}?size=256`
+      : `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(discordId) >> 22n) % 6n)}.png`;
 
     // Refus si déjà lié à un autre compte, ou si Discord ban/blacklist
     const taken = db.prepare('SELECT id FROM users WHERE discord_id = ? AND id != ?').get(discordId, payload.id);
@@ -163,7 +170,16 @@ router.get('/discord/callback', async (req, res) => {
       return res.redirect(`${SITE_URL}/dashboard?discord=banned`);
     }
 
-    db.prepare('UPDATE users SET discord_id = ? WHERE id = ?').run(discordId, payload.id);
+    db.prepare(`
+      UPDATE users SET discord_id = ?, discord_username = ?, discord_global_name = ?, discord_avatar = ?
+      WHERE id = ?
+    `).run(
+      discordId,
+      discordUser.username || null,
+      discordUser.global_name || null,
+      avatarUrl,
+      payload.id
+    );
     res.redirect(`${SITE_URL}/dashboard?discord=linked`);
   } catch {
     res.redirect(`${SITE_URL}/dashboard?discord=error`);

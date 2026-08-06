@@ -194,7 +194,7 @@ export default function Admin() {
                 Produit sélectionné
                 <select value={keyProduct} onChange={(e) => run(() => loadProductKeys(e.target.value))}>
                   <option value="">Tous les produits</option>
-                  {products.map((p) => (
+                  {products.filter((p) => !p.is_free).map((p) => (
                     <option key={p.id} value={p.slug}>{p.name}</option>
                   ))}
                 </select>

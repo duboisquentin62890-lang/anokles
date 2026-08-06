@@ -104,6 +104,7 @@ router.post('/generate', adminRequired, (req, res) => {
   if (product_id) product = db.prepare('SELECT * FROM products WHERE id = ?').get(product_id);
   if (!product && product_slug) product = db.prepare('SELECT * FROM products WHERE slug = ?').get(product_slug);
   if (!product) return res.status(400).json({ error: 'Produit invalide' });
+  if (product.is_free) return res.status(400).json({ error: 'Impossible de générer une clé pour un produit gratuit' });
 
   const days = resolveDays(duration, quantity);
   const durationCode = codeForDuration(duration);
@@ -173,6 +174,82 @@ router.post('/:id/revoke', adminRequired, (req, res) => {
 router.delete('/:id', adminRequired, (req, res) => {
   db.prepare('DELETE FROM license_keys WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+/* ---------------------------------------------------------------------------
+ * Vérification pour le LOADER C++ (machine-to-machine, pas de JWT).
+ * POST /api/keys/verify  { key, hwid }
+ *  - optionnel : header  x-loader-key: <LOADER_API_KEY>  (si la var est posée)
+ *  - lie le HWID à la 1ʳᵉ utilisation puis le verrouille (anti-partage de clé)
+ *  - refuse clé expirée / révoquée / blacklistée / HWID différent
+ * Réponse : { valid: bool, reason?, product, expires_at, duration_days }
+ * ------------------------------------------------------------------------- */
+function isValueBlacklisted(type, value) {
+  if (!value) return false;
+  return Boolean(db.prepare('SELECT 1 FROM blacklist WHERE type = ? AND value = ?').get(type, value));
+}
+
+router.post('/verify', (req, res) => {
+  const loaderKey = process.env.LOADER_API_KEY;
+  if (loaderKey && req.get('x-loader-key') !== loaderKey) {
+    return res.status(401).json({ valid: false, reason: 'unauthorized' });
+  }
+
+  const key = String((req.body && req.body.key) || '').trim();
+  const hwid = String((req.body && req.body.hwid) || '').trim();
+  const productRef = req.body && req.body.product; // slug ou id du loader appelant (optionnel mais recommandé)
+  if (!key || !hwid) return res.status(400).json({ valid: false, reason: 'key_and_hwid_required' });
+
+  const row = db.prepare('SELECT * FROM license_keys WHERE key_code = ?').get(key);
+  if (!row) return res.json({ valid: false, reason: 'not_found' });
+
+  // Vérifie que la clé appartient bien au produit du loader qui l'utilise
+  if (productRef !== undefined && productRef !== null && String(productRef).length) {
+    let expected = null;
+    if (/^\d+$/.test(String(productRef))) expected = db.prepare('SELECT id FROM products WHERE id = ?').get(Number(productRef));
+    else expected = db.prepare('SELECT id FROM products WHERE slug = ?').get(String(productRef));
+    if (!expected) return res.json({ valid: false, reason: 'unknown_product' });
+    if (expected.id !== row.product_id) return res.json({ valid: false, reason: 'wrong_product' });
+  }
+
+  if (row.status === 'blacklisted' || row.status === 'revoked') {
+    return res.json({ valid: false, reason: row.status });
+  }
+  if (isValueBlacklisted('key', key) || isValueBlacklisted('hwid', hwid)) {
+    return res.json({ valid: false, reason: 'blacklisted' });
+  }
+
+  // Activation à la première utilisation par le loader
+  if (row.status === 'unused') {
+    const expires = new Date(Date.now() + row.duration_days * 86400000).toISOString();
+    db.prepare(`
+      UPDATE license_keys SET status = 'active', redeemed_at = datetime('now'), expires_at = ?, hwid = ?
+      WHERE id = ?
+    `).run(expires, hwid, row.id);
+    row.status = 'active'; row.expires_at = expires; row.hwid = hwid;
+  }
+
+  // Verrou HWID : lie si vide, sinon exige la correspondance
+  if (!row.hwid) {
+    db.prepare('UPDATE license_keys SET hwid = ? WHERE id = ?').run(hwid, row.id);
+    row.hwid = hwid;
+  } else if (row.hwid !== hwid) {
+    return res.json({ valid: false, reason: 'hwid_mismatch' });
+  }
+
+  if (row.expires_at && new Date(row.expires_at) < new Date()) {
+    db.prepare("UPDATE license_keys SET status = 'expired' WHERE id = ?").run(row.id);
+    return res.json({ valid: false, reason: 'expired', expires_at: row.expires_at });
+  }
+
+  const product = db.prepare('SELECT id, name, slug FROM products WHERE id = ?').get(row.product_id);
+  return res.json({
+    valid: true,
+    product,
+    duration_days: row.duration_days,
+    expires_at: row.expires_at,
+    hwid: row.hwid,
+  });
 });
 
 module.exports = { router, resolveDuration, resolveDays, codeForDuration, DURATIONS, DURATION_PRESETS };

@@ -10,6 +10,7 @@ const {
 } = require('discord.js');
 const { db, generateKeyCode } = require('../db');
 const { resolveDuration, codeForDuration } = require('../routes/keys');
+const tickets = require('./tickets');
 
 let client = null;
 
@@ -38,7 +39,8 @@ function helpEmbed() {
       { name: '+unban / /unban', value: '`+unban <discord_id>`' },
       { name: '+check / /check', value: '`+check <key|discord_id>` — infos licence' },
       { name: '+stock / /stock', value: 'Stock clés par produit' },
-      { name: '+lookup / /lookup', value: '`+lookup <discord_id|username>`' }
+      { name: '+lookup / /lookup', value: '`+lookup <discord_id|username>`' },
+      { name: '🎟️ Tickets', value: '`+ticketsetup` (setup auto) · `+ticketpanel` · `+claim` · `+close [raison]` · `+add @user` · `+remove @user` · `+ticketbl @user` · `+unticketbl @user`' }
     )
     .setFooter({ text: 'Anokles API · rouge / noir' });
 }
@@ -53,6 +55,7 @@ async function handleGenKey(ctx, args) {
   const [productRef, duration = '30d', amount = '1', ...noteParts] = args;
   const product = findProduct(productRef);
   if (!product) return ctx.reply('❌ Produit introuvable. Utilise slug ou id (`+stock`).');
+  if (product.is_free) return ctx.reply('❌ Impossible de générer une clé pour un produit gratuit.');
 
   const days = resolveDuration(duration);
   const durationCode = codeForDuration(duration);
@@ -213,6 +216,7 @@ function makeCtx(source) {
       authorId: i.user.id,
       member: i.member,
       guild: i.guild,
+      channel: i.channel,
       reply: (content) => {
         if (typeof content === 'string') return i.reply({ content, ephemeral: true });
         return i.reply({ ...content, ephemeral: content.ephemeral !== false });
@@ -225,6 +229,7 @@ function makeCtx(source) {
     authorId: msg.author.id,
     member: msg.member,
     guild: msg.guild,
+    channel: msg.channel,
     reply: (content) => {
       if (typeof content === 'string') return msg.reply(content);
       return msg.reply(content);
@@ -259,6 +264,7 @@ async function dispatch(ctx, cmd, args) {
     case 'lookup':
       return handleLookup(ctx, args);
     default:
+      if (tickets.TICKET_COMMANDS.includes(cmd)) return tickets.command(ctx, cmd, args);
       return ctx.reply('Commande inconnue. `+help`');
   }
 }
@@ -351,7 +357,11 @@ async function startBot() {
 
   client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
-    if (!message.content.startsWith('+')) return;
+    if (!message.content.startsWith('+')) {
+      // Hors commandes : transcript + IA auto-responder dans les tickets
+      try { await tickets.onMessage(message); } catch (e) { console.error('[tickets] onMessage', e); }
+      return;
+    }
     if (!staffOnly(message.member)) {
       return message.reply('❌ Staff uniquement');
     }
@@ -367,6 +377,19 @@ async function startBot() {
   });
 
   client.on('interactionCreate', async (interaction) => {
+    // Boutons de tickets (ouverture ouverte à tous ; claim/close = staff, vérifié dedans)
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith('tk_')) {
+        try { await tickets.handleButton(interaction); }
+        catch (e) {
+          console.error('[tickets] button', e);
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: `Erreur: ${e.message}`, ephemeral: true }).catch(() => {});
+          }
+        }
+      }
+      return;
+    }
     if (!interaction.isChatInputCommand()) return;
     if (!staffOnly(interaction.member)) {
       return interaction.reply({ content: '❌ Staff uniquement', ephemeral: true });

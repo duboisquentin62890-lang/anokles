@@ -35,7 +35,6 @@ function discordLinkUrl() {
   return `/api/auth/discord/link?token=${encodeURIComponent(token)}`;
 }
 
-// __REST__
 export default function Dashboard() {
   const { user, keys, discordOauth, loading, refresh } = useAuth();
   const location = useLocation();
@@ -75,7 +74,7 @@ export default function Dashboard() {
     for (const k of keys) map[k.product_slug] = k;
     return map;
   }, [keys]);
-// __REST2__
+
   if (!loading && !user) return <Navigate to="/login" replace />;
   if (loading) return <div className="container section muted">Chargement…</div>;
 
@@ -134,7 +133,6 @@ export default function Dashboard() {
     setErr(''); setBusy(slug);
     try { await downloadProduct(slug); } catch (e2) { setErr(e2.message); } finally { setBusy(''); }
   }
-// __REST3__
   // Gate : le Discord est obligatoire pour se connecter au dashboard (hors staff)
   if (!isStaff && !linked) {
     return (
@@ -193,13 +191,29 @@ export default function Dashboard() {
       <main className="panel-main">
         <div className="section-head">
           <div className="eyebrow">Dashboard</div>
-          <h2>Salut, {user.username}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            {user.discord_avatar ? (
+              <img
+                src={user.discord_avatar}
+                alt="Avatar Discord"
+                width={56}
+                height={56}
+                style={{ borderRadius: '50%', border: '2px solid rgba(225,6,0,0.6)' }}
+              />
+            ) : null}
+            <div>
+              <h2 style={{ margin: 0 }}>Salut, {user.discord_global_name || user.discord_username || user.username}</h2>
+              {user.discord_username ? (
+                <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>@{user.discord_username}</p>
+              ) : null}
+            </div>
+          </div>
           <p>{TABS.find((t) => t.id === tab)?.label} · gère tes loaders et ton compte.</p>
         </div>
 
         {err ? <div className="alert">{err}</div> : null}
         {msg ? <div className="alert" style={{ borderColor: 'rgba(80,200,120,0.4)' }}>{msg}</div> : null}
-// __REST4__
+
         {tab === 'overview' ? (
           <>
             <div className="stats">
@@ -228,7 +242,7 @@ export default function Dashboard() {
             </form>
           </div>
         ) : null}
-// __REST5__
+
         {tab === 'loaders' ? (
           <div className="card-plain">
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', marginBottom: '0.35rem' }}>Mes loaders</h3>
@@ -285,7 +299,7 @@ export default function Dashboard() {
             </div>
           </div>
         ) : null}
-// __REST6__
+
         {tab === 'settings' ? (
           <div className="card-plain">
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', marginBottom: '0.75rem' }}>Paramètres · Discord</h3>

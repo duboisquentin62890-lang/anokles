@@ -118,6 +118,7 @@ router.get('/:slug/keys', adminRequired, (req, res) => {
 router.post('/:slug/keys', adminRequired, (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE slug = ?').get(req.params.slug);
   if (!product) return res.status(404).json({ error: 'Produit introuvable' });
+  if (product.is_free) return res.status(400).json({ error: 'Impossible de générer une clé pour un produit gratuit' });
 
   const { duration, quantity = 1, amount = 1, note, discord_id } = req.body || {};
   const days = resolveDays(duration, quantity);
