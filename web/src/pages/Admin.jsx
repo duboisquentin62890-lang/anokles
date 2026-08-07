@@ -57,6 +57,7 @@ export default function Admin() {
   const [productForm, setProductForm] = useState({
     slug: '', name: '', description: '', category: 'General', price: 0, is_free: false, featured: false, status: 'undetected',
   });
+  const [editId, setEditId] = useState(null);
   const [q, setQ] = useState('');
   const [generated, setGenerated] = useState([]);
 
@@ -142,6 +143,39 @@ export default function Admin() {
     } catch (e) {
       setErr(e.message);
     }
+  }
+
+  const emptyProduct = {
+    slug: '', name: '', description: '', category: 'General', price: 0, is_free: false, featured: false, status: 'undetected',
+  };
+  function startEdit(p) {
+    setEditId(p.id);
+    setProductForm({
+      slug: p.slug || '',
+      name: p.name || '',
+      description: p.description || '',
+      category: p.category || 'General',
+      price: p.price ?? 0,
+      is_free: Boolean(p.is_free),
+      featured: Boolean(p.featured),
+      status: p.status || 'undetected',
+    });
+    setTab('products');
+    setMsg(`Édition de « ${p.name} »`);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function cancelEdit() {
+    setEditId(null);
+    setProductForm(emptyProduct);
+    setMsg('');
+  }
+  function deleteProduct(p) {
+    if (typeof window !== 'undefined' && !window.confirm(`Supprimer le produit « ${p.name} » ? Ça supprime aussi ses clés. Action irréversible.`)) return;
+    run(async () => {
+      await api(`/api/products/${p.id}`, { method: 'DELETE' });
+      if (editId === p.id) cancelEdit();
+      setMsg(`Produit « ${p.name} » supprimé`);
+    });
   }
 
   return (
@@ -350,18 +384,23 @@ export default function Admin() {
           <>
             <div className="card-plain">
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', marginBottom: '0.75rem' }}>
-                Nouveau produit
+                {editId ? `Éditer le produit #${editId}` : 'Nouveau produit'}
               </h3>
               <form
                 className="form wide"
                 onSubmit={(e) => {
                   e.preventDefault();
                   run(async () => {
-                    await api('/api/products', { method: 'POST', body: productForm });
-                    setMsg('Produit créé');
-                    setProductForm({
-                      slug: '', name: '', description: '', category: 'General', price: 0, is_free: false, featured: false, status: 'undetected',
-                    });
+                    const body = { ...productForm, price: Number(productForm.price) || 0 };
+                    if (editId) {
+                      await api(`/api/products/${editId}`, { method: 'PATCH', body });
+                      setMsg('Produit mis à jour');
+                    } else {
+                      await api('/api/products', { method: 'POST', body });
+                      setMsg('Produit créé');
+                    }
+                    setEditId(null);
+                    setProductForm(emptyProduct);
                   });
                 }}
               >
@@ -389,7 +428,12 @@ export default function Admin() {
                   </label>
                   <label>Status<input value={productForm.status} onChange={(e) => setProductForm({ ...productForm, status: e.target.value })} /></label>
                 </div>
-                <button className="btn btn-primary" type="submit">Create</button>
+                <div className="hero-cta">
+                  <button className="btn btn-primary" type="submit">{editId ? 'Mettre à jour' : 'Create'}</button>
+                  {editId ? (
+                    <button className="btn btn-ghost" type="button" onClick={cancelEdit}>Annuler</button>
+                  ) : null}
+                </div>
               </form>
             </div>
             <div className="table-wrap">
@@ -445,6 +489,17 @@ export default function Admin() {
                           })}
                         >
                           Toggle stock
+                        </button>
+                        <button className="btn btn-ghost btn-sm" type="button" onClick={() => startEdit(p)}>
+                          Éditer
+                        </button>
+                        <button
+                          className="btn btn-sm"
+                          type="button"
+                          style={{ background: 'rgba(225,6,0,0.15)', borderColor: 'rgba(225,6,0,0.5)', color: '#ff6b6b' }}
+                          onClick={() => deleteProduct(p)}
+                        >
+                          Supprimer
                         </button>
                       </td>
                     </tr>
