@@ -11,6 +11,7 @@ const {
 const { db, generateKeyCode } = require('../db');
 const { resolveDuration, codeForDuration } = require('../routes/keys');
 const tickets = require('./tickets');
+const autoclaim = require('./autoclaim');
 
 let client = null;
 
@@ -40,7 +41,8 @@ function helpEmbed() {
       { name: '+check / /check', value: '`+check <key|discord_id>` — infos licence' },
       { name: '+stock / /stock', value: 'Stock clés par produit' },
       { name: '+lookup / /lookup', value: '`+lookup <discord_id|username>`' },
-      { name: '🎟️ Tickets', value: '`+ticketsetup` (setup auto) · `+ticketpanel` · `+claim` · `+close [raison]` · `+add @user` · `+remove @user` · `+ticketbl @user` · `+unticketbl @user`' }
+      { name: '🎟️ Tickets', value: '`+ticketsetup` (setup auto) · `+ticketpanel` · `+claim` · `+close [raison]` · `+add @user` · `+remove @user` · `+ticketbl @user` · `+unticketbl @user`' },
+      { name: '🎫 Autoclaim', value: '`+autoclaim` — crée les rôles Customer (+ un par produit payant) et poste le panneau : le client entre sa clé pour recevoir son rôle.' }
     )
     .setFooter({ text: 'Anokles API · rouge / noir' });
 }
@@ -265,6 +267,7 @@ async function dispatch(ctx, cmd, args) {
       return handleLookup(ctx, args);
     default:
       if (tickets.TICKET_COMMANDS.includes(cmd)) return tickets.command(ctx, cmd, args);
+      if (autoclaim.AUTOCLAIM_COMMANDS.includes(cmd)) return autoclaim.command(ctx, cmd, args);
       return ctx.reply('Commande inconnue. `+help`');
   }
 }
@@ -377,16 +380,28 @@ async function startBot() {
   });
 
   client.on('interactionCreate', async (interaction) => {
-    // Boutons de tickets (ouverture ouverte à tous ; claim/close = staff, vérifié dedans)
+    // Boutons (tickets tk_* / autoclaim ac_*) — ouverture ouverte à tous
     if (interaction.isButton()) {
-      if (interaction.customId.startsWith('tk_')) {
-        try { await tickets.handleButton(interaction); }
-        catch (e) {
-          console.error('[tickets] button', e);
-          if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: `Erreur: ${e.message}`, ephemeral: true }).catch(() => {});
-          }
+      const id = interaction.customId;
+      try {
+        if (id.startsWith('tk_')) await tickets.handleButton(interaction);
+        else if (id.startsWith('ac_')) await autoclaim.handleButton(interaction);
+      } catch (e) {
+        console.error('[bot] button', e);
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: `Erreur: ${e.message}`, ephemeral: true }).catch(() => {});
         }
+      }
+      return;
+    }
+    // Soumission de modal (autoclaim : saisie de la clé)
+    if (interaction.isModalSubmit()) {
+      try {
+        if (interaction.customId.startsWith('ac_')) await autoclaim.handleModal(interaction);
+      } catch (e) {
+        console.error('[bot] modal', e);
+        if (interaction.deferred) await interaction.editReply(`Erreur: ${e.message}`).catch(() => {});
+        else if (!interaction.replied) await interaction.reply({ content: `Erreur: ${e.message}`, ephemeral: true }).catch(() => {});
       }
       return;
     }
