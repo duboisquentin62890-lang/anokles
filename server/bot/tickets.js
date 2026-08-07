@@ -103,30 +103,50 @@ function buildPanelRows() {
 }
 
 /* ---------- setup auto (survit au reboot via settings) ---------- */
-async function setup(guild, panelChannel) {
-  const everyone = guild.roles.everyone;
+// Overwrites de base d'une catégorie de ticket : cachée à @everyone, ouverte au staff.
+function baseCategoryOverwrites(guild) {
+  const ow = [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }];
+  const staffRole = process.env.DISCORD_STAFF_ROLE_ID;
+  if (staffRole) {
+    ow.push({
+      id: staffRole,
+      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+    });
+  }
+  return ow;
+}
 
+// Crée (ou retrouve) la catégorie d'un type de ticket. Idempotent.
+async function ensureCategory(guild, name) {
+  let cat = guild.channels.cache.find(
+    (c) => c.type === ChannelType.GuildCategory && c.name === name
+  );
+  if (!cat) {
+    cat = await guild.channels.create({
+      name,
+      type: ChannelType.GuildCategory,
+      permissionOverwrites: baseCategoryOverwrites(guild),
+    });
+  }
+  return cat;
+}
+
+async function setup(guild, panelChannel) {
   // Rôle "Ticket BL" — empêche d'ouvrir des tickets
   let blRole = guild.roles.cache.find((r) => r.name === 'Ticket BL');
   if (!blRole) {
     blRole = await guild.roles.create({ name: 'Ticket BL', color: 0x555555, reason: 'Anokles tickets' });
   }
 
-  // Catégorie qui héberge les salons de tickets
-  let category = guild.channels.cache.find(
-    (c) => c.type === ChannelType.GuildCategory && c.name === '🎟️ Tickets'
-  );
-  if (!category) {
-    category = await guild.channels.create({
-      name: '🎟️ Tickets',
-      type: ChannelType.GuildCategory,
-      permissionOverwrites: [
-        { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      ],
-    });
+  // Une catégorie par type de ticket : 🛒 Buy · 🛠️ Support · 💻 HWID · 🤝 Resell · 🎥 Média
+  const categories = {};
+  for (const t of TICKET_TYPES) {
+    const cat = await ensureCategory(guild, `${t.emoji} ${t.label}`);
+    categories[t.key] = cat.id;
   }
+  const firstCategoryId = categories[TICKET_TYPES[0].key];
 
-  // Salon transcripts (staff only)
+  // Salon transcripts (staff only), rangé sous la première catégorie
   let transcripts = guild.channels.cache.find(
     (c) => c.type === ChannelType.GuildText && c.name === 'ticket-logs'
   );
@@ -134,8 +154,8 @@ async function setup(guild, panelChannel) {
     transcripts = await guild.channels.create({
       name: 'ticket-logs',
       type: ChannelType.GuildText,
-      parent: category.id,
-      permissionOverwrites: [{ id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] }],
+      parent: firstCategoryId,
+      permissionOverwrites: baseCategoryOverwrites(guild),
     });
   }
 
@@ -144,7 +164,8 @@ async function setup(guild, panelChannel) {
 
   const cfg = getConfig();
   cfg.guildId = guild.id;
-  cfg.categoryId = category.id;
+  cfg.categories = categories;      // { buy, support, hwid, resell, media } → id de catégorie
+  cfg.categoryId = firstCategoryId; // compat rétro (ancien schéma mono-catégorie)
   cfg.blacklistRoleId = blRole.id;
   cfg.transcriptChannelId = transcripts.id;
   cfg.panelChannelId = target.id;
@@ -174,7 +195,9 @@ async function openTicket(interaction, key) {
   if (cfg.blacklistRoleId && interaction.member?.roles?.cache?.has(cfg.blacklistRoleId)) {
     return interaction.reply({ content: '⛔ Tu es blacklist des tickets.', ephemeral: true });
   }
-  if (!cfg.categoryId) {
+  const categories = cfg.categories || {};
+  let parentId = categories[key] || cfg.categoryId;
+  if (!parentId) {
     return interaction.reply({ content: '❌ Tickets non configurés. Un admin doit faire `+ticketsetup`.', ephemeral: true });
   }
 
@@ -185,6 +208,18 @@ async function openTicket(interaction, key) {
   }
 
   await interaction.deferReply({ ephemeral: true });
+
+  // Auto-heal : si la catégorie a été supprimée, on la recrée à la volée
+  const parentExists = await guild.channels.fetch(parentId).catch(() => null);
+  if (!parentExists) {
+    const cat = await ensureCategory(guild, `${type.emoji} ${type.label}`);
+    parentId = cat.id;
+    categories[key] = cat.id;
+    cfg.categories = categories;
+    if (!cfg.categoryId) cfg.categoryId = cat.id;
+    saveConfig(cfg);
+  }
+
   const number = nextNumber();
   const overwrites = [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
@@ -204,7 +239,7 @@ async function openTicket(interaction, key) {
   const channel = await guild.channels.create({
     name: `${type.emoji}${type.key}-${number}`,
     type: ChannelType.GuildText,
-    parent: cfg.categoryId,
+    parent: parentId,
     topic: `Ticket #${number} · ${type.label} · ${opener.tag} (${opener.id})`,
     permissionOverwrites: overwrites,
   });
@@ -395,8 +430,9 @@ async function command(ctx, cmd, args) {
   switch (cmd) {
     case 'ticketsetup': {
       const cfg = await setup(guild, channel);
+      const cats = TICKET_TYPES.map((t) => `${t.emoji} <#${cfg.categories[t.key]}>`).join(' · ');
       return ctx.reply(
-        `✅ Tickets configurés.\n• Catégorie <#${cfg.categoryId}>\n• Panel <#${cfg.panelChannelId}>\n` +
+        `✅ Tickets configurés.\n• Catégories : ${cats}\n• Panel <#${cfg.panelChannelId}>\n` +
         `• Logs <#${cfg.transcriptChannelId}>\n• Rôle BL <@&${cfg.blacklistRoleId}>`
       );
     }
