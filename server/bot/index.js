@@ -22,7 +22,19 @@ function staffOnly(member) {
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
   const staffRole = process.env.DISCORD_STAFF_ROLE_ID;
   if (staffRole && member.roles.cache.has(staffRole)) return true;
+  // Whitelist bot (accès staff complet) — +wl <id>
+  try {
+    if (db.prepare('SELECT 1 FROM bot_whitelist WHERE discord_id = ?').get(member.id)) return true;
+  } catch { /* table absente */ }
   return false;
+}
+
+// Réservé owner/admin (pas les whitelistés) pour éviter l'auto-escalade
+function ownerOrAdmin(member) {
+  if (!member) return false;
+  const owners = (process.env.DISCORD_OWNER_IDS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (owners.includes(member.id)) return true;
+  return member.permissions.has(PermissionFlagsBits.Administrator);
 }
 
 function helpEmbed() {
@@ -39,6 +51,10 @@ function helpEmbed() {
       { name: '+ban / /ban', value: '`+ban <@user|id> [raison]` — ban site + Discord' },
       { name: '+unban / /unban', value: '`+unban <discord_id>`' },
       { name: '+check / /check', value: '`+check <key|discord_id>` — infos licence' },
+      { name: '+delkey / +blkey / +unblkey', value: '`+delkey <key>` · `+blkey <key> [raison]` (BL clé+IP+HWID) · `+unblkey <key>`' },
+      { name: '+products / +prices', value: '`+products` (liste + prix) · `+prices <slug|id>`' },
+      { name: '+addprice / +delprice', value: '`+addprice <slug|id> "<label>" <duration> <prix>` · `+delprice <priceId>`' },
+      { name: '+wl / +unwl / +wllist', value: 'Owner/admin : whitelist un membre (accès staff complet)' },
       { name: '+stock / /stock', value: 'Stock clés par produit' },
       { name: '+lookup / /lookup', value: '`+lookup <discord_id|username>`' },
       { name: '🎟️ Tickets', value: '`+ticketsetup` (setup auto) · `+ticketpanel` · `+claim` · `+close [raison]` · `+add @user` · `+remove @user` · `+ticketbl @user` · `+unticketbl @user`' },
@@ -210,6 +226,93 @@ async function handleLookup(ctx, args) {
   return ctx.reply({ embeds: [embed] });
 }
 
+/* ---------- Whitelist bot (owner/admin only) ---------- */
+async function handleWl(ctx, args) {
+  if (!ownerOrAdmin(ctx.member)) return ctx.reply('❌ Réservé owner/admin.');
+  const id = (args[0] || '').replace(/[<@!>]/g, '');
+  if (!id) return ctx.reply('Usage: `+wl <@user|id>`');
+  db.prepare('INSERT OR IGNORE INTO bot_whitelist (discord_id, added_by) VALUES (?, ?)').run(id, ctx.authorTag);
+  return ctx.reply(`✅ \`${id}\` ajouté à la whitelist (accès staff complet).`);
+}
+async function handleUnwl(ctx, args) {
+  if (!ownerOrAdmin(ctx.member)) return ctx.reply('❌ Réservé owner/admin.');
+  const id = (args[0] || '').replace(/[<@!>]/g, '');
+  if (!id) return ctx.reply('Usage: `+unwl <@user|id>`');
+  db.prepare('DELETE FROM bot_whitelist WHERE discord_id = ?').run(id);
+  return ctx.reply(`✅ \`${id}\` retiré de la whitelist.`);
+}
+async function handleWlList(ctx) {
+  if (!ownerOrAdmin(ctx.member)) return ctx.reply('❌ Réservé owner/admin.');
+  const rows = db.prepare('SELECT discord_id, added_by, created_at FROM bot_whitelist ORDER BY created_at DESC').all();
+  const desc = rows.length ? rows.map((r) => `<@${r.discord_id}> · par ${r.added_by || '—'}`).join('\n') : 'Vide';
+  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0xe10600).setTitle('Whitelist bot').setDescription(desc)] });
+}
+
+/* ---------- Clés par code (delkey / blkey / unblkey) ---------- */
+async function handleDelKey(ctx, args) {
+  const code = args[0];
+  if (!code) return ctx.reply('Usage: `+delkey <key>`');
+  const r = db.prepare('DELETE FROM license_keys WHERE key_code = ?').run(code);
+  return ctx.reply(r.changes ? `✅ Clé \`${code}\` supprimée.` : '❌ Clé introuvable.');
+}
+async function handleBlKey(ctx, args) {
+  const [code, ...reasonParts] = args;
+  if (!code) return ctx.reply('Usage: `+blkey <key> [raison]`');
+  const row = db.prepare('SELECT * FROM license_keys WHERE key_code = ?').get(code);
+  if (!row) return ctx.reply('❌ Clé introuvable.');
+  const reason = reasonParts.join(' ') || 'Blacklisted via bot';
+  db.prepare('INSERT OR IGNORE INTO blacklist (type, value, reason, created_by) VALUES (?, ?, ?, ?)').run('key', code, reason, ctx.authorTag);
+  if (row.ip) db.prepare('INSERT OR IGNORE INTO blacklist (type, value, reason, created_by) VALUES (?, ?, ?, ?)').run('ip', row.ip, `Key ${code}`, ctx.authorTag);
+  if (row.hwid) db.prepare('INSERT OR IGNORE INTO blacklist (type, value, reason, created_by) VALUES (?, ?, ?, ?)').run('hwid', row.hwid, `Key ${code}`, ctx.authorTag);
+  db.prepare("UPDATE license_keys SET status = 'blacklisted' WHERE id = ?").run(row.id);
+  return ctx.reply(`✅ Clé \`${code}\` blacklist${row.ip ? ' (+ IP)' : ''}.`);
+}
+async function handleUnblKey(ctx, args) {
+  const code = args[0];
+  if (!code) return ctx.reply('Usage: `+unblkey <key>`');
+  const row = db.prepare('SELECT * FROM license_keys WHERE key_code = ?').get(code);
+  if (!row) return ctx.reply('❌ Clé introuvable.');
+  db.prepare("DELETE FROM blacklist WHERE type = 'key' AND value = ?").run(code);
+  const status = row.redeemed_at ? 'active' : 'unused';
+  db.prepare('UPDATE license_keys SET status = ? WHERE id = ?').run(status, row.id);
+  return ctx.reply(`✅ Clé \`${code}\` retirée de la blacklist (→ ${status}).`);
+}
+
+/* ---------- Produits & prix ---------- */
+async function handleProducts(ctx) {
+  const rows = db.prepare('SELECT id, name, slug, price, is_free FROM products ORDER BY id').all();
+  const desc = rows.map((p) => {
+    const pf = db.prepare('SELECT MIN(price) AS m FROM product_prices WHERE product_id = ?').get(p.id);
+    const from = pf && pf.m != null ? pf.m : p.price;
+    return `**${p.name}** \`${p.slug}\` (#${p.id}) · ${p.is_free ? 'Gratuit' : `dès ${from}€`}`;
+  }).join('\n') || 'Aucun produit';
+  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0xe10600).setTitle('Produits').setDescription(desc)] });
+}
+async function handlePrices(ctx, args) {
+  const product = findProduct(args[0]);
+  if (!product) return ctx.reply('Usage: `+prices <slug|id>`');
+  const rows = db.prepare('SELECT id, label, duration, price FROM product_prices WHERE product_id = ? ORDER BY sort, price').all(product.id);
+  const desc = rows.length ? rows.map((r) => `#${r.id} · **${r.label}** (${r.duration}) → ${r.price}€`).join('\n') : 'Aucun palier (prix unique).';
+  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0xe10600).setTitle(`Prix · ${product.name}`).setDescription(desc)] });
+}
+async function handleAddPrice(ctx, args) {
+  const [ref, label, duration, price] = args;
+  if (!ref || !label || !duration || price === undefined) {
+    return ctx.reply('Usage: `+addprice <slug|id> <label> <duration> <prix>`\nEx: `+addprice fortnite-external "1 mois" month 19.99`');
+  }
+  const product = findProduct(ref);
+  if (!product) return ctx.reply('❌ Produit introuvable.');
+  const info = db.prepare('INSERT INTO product_prices (product_id, label, duration, price, sort) VALUES (?, ?, ?, ?, 0)')
+    .run(product.id, label, duration, Number(price) || 0);
+  return ctx.reply(`✅ Palier #${info.lastInsertRowid} ajouté à **${product.name}** : ${label} (${duration}) → ${Number(price) || 0}€`);
+}
+async function handleDelPrice(ctx, args) {
+  const id = Number(args[0]);
+  if (!id) return ctx.reply('Usage: `+delprice <priceId>`');
+  const r = db.prepare('DELETE FROM product_prices WHERE id = ?').run(id);
+  return ctx.reply(r.changes ? `✅ Palier #${id} supprimé.` : '❌ Palier introuvable.');
+}
+
 function makeCtx(source) {
   if (source.type === 'interaction') {
     const i = source.interaction;
@@ -265,6 +368,26 @@ async function dispatch(ctx, cmd, args) {
       return handleStock(ctx);
     case 'lookup':
       return handleLookup(ctx, args);
+    case 'wl':
+      return handleWl(ctx, args);
+    case 'unwl':
+      return handleUnwl(ctx, args);
+    case 'wllist':
+      return handleWlList(ctx);
+    case 'delkey':
+      return handleDelKey(ctx, args);
+    case 'blkey':
+      return handleBlKey(ctx, args);
+    case 'unblkey':
+      return handleUnblKey(ctx, args);
+    case 'products':
+      return handleProducts(ctx);
+    case 'prices':
+      return handlePrices(ctx, args);
+    case 'addprice':
+      return handleAddPrice(ctx, args);
+    case 'delprice':
+      return handleDelPrice(ctx, args);
     default:
       if (tickets.TICKET_COMMANDS.includes(cmd)) return tickets.command(ctx, cmd, args);
       if (autoclaim.AUTOCLAIM_COMMANDS.includes(cmd)) return autoclaim.command(ctx, cmd, args);
@@ -310,6 +433,11 @@ function buildSlashCommands() {
       .setDescription('Check licence')
       .addStringOption((o) => o.setName('target').setDescription('key ou discord_id').setRequired(true)),
     new SlashCommandBuilder().setName('stock').setDescription('Stock clés'),
+    new SlashCommandBuilder().setName('products').setDescription('Liste produits + prix'),
+    new SlashCommandBuilder()
+      .setName('prices')
+      .setDescription('Paliers de prix d\'un produit')
+      .addStringOption((o) => o.setName('product').setDescription('slug ou id').setRequired(true)),
     new SlashCommandBuilder()
       .setName('lookup')
       .setDescription('Lookup user')
@@ -368,7 +496,9 @@ async function startBot() {
     if (!staffOnly(message.member)) {
       return message.reply('❌ Staff uniquement');
     }
-    const parts = message.content.slice(1).trim().split(/\s+/);
+    const raw = message.content.slice(1).trim();
+    // Tokenise en respectant les "guillemets" (utile pour +addprice "1 mois" …)
+    const parts = (raw.match(/"[^"]*"|\S+/g) || []).map((t) => t.replace(/^"|"$/g, ''));
     const cmd = (parts.shift() || '').toLowerCase();
     const ctx = makeCtx({ type: 'message', message });
     try {
@@ -435,6 +565,8 @@ async function startBot() {
       args = [interaction.options.getString('discord_id')];
     } else if (name === 'lookup') {
       args = [interaction.options.getString('query')];
+    } else if (name === 'prices') {
+      args = [interaction.options.getString('product')];
     }
     try {
       await dispatch(ctx, name, args);

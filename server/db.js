@@ -157,6 +157,33 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS product_prices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    duration TEXT NOT NULL,
+    price REAL NOT NULL DEFAULT 0,
+    sort INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS product_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    label TEXT,
+    filename TEXT NOT NULL,
+    path TEXT NOT NULL,
+    size INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS bot_whitelist (
+    discord_id TEXT PRIMARY KEY,
+    added_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // Migrations légères : ajoute les colonnes manquantes sur une base existante.
@@ -169,6 +196,7 @@ function ensureColumn(table, column, decl) {
 ensureColumn('users', 'discord_username', 'TEXT');
 ensureColumn('users', 'discord_global_name', 'TEXT');
 ensureColumn('users', 'discord_avatar', 'TEXT');
+ensureColumn('license_keys', 'ip', 'TEXT');
 
 function wrapDb(database) {
   return {

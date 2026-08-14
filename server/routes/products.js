@@ -18,13 +18,67 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 300 * 1024 * 1024 } });
 
+function attachExtras(product) {
+  if (!product) return product;
+  const prices = db.prepare(
+    'SELECT id, label, duration, price FROM product_prices WHERE product_id = ? ORDER BY sort ASC, price ASC'
+  ).all(product.id);
+  const files = db.prepare(
+    'SELECT id, label, filename, size FROM product_files WHERE product_id = ? ORDER BY id DESC'
+  ).all(product.id);
+  const priceFrom = prices.length ? Math.min(...prices.map((p) => p.price)) : product.price;
+  return { ...product, prices, files, price_from: priceFrom };
+}
+
+// Contrôle licence partagé (compte JWT OU clé) — renvoie {ip,userId} ou {error,status}
+function verifyDownloadAccess(req, product) {
+  const ip = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.ip;
+  const keyCode = req.body?.key || req.headers['x-license-key'];
+  let userId = null;
+
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    try {
+      const jwt = require('jsonwebtoken');
+      const payload = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET || 'dev-secret');
+      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.id);
+      if (user) {
+        if (user.banned) return { error: 'Compte banni', status: 403 };
+        userId = user.id;
+        const ban = isBanned({ discordId: user.discord_id, username: user.username, ip });
+        const bl = isBlacklisted({ discordId: user.discord_id, ip });
+        if (ban || bl) return { error: 'Accès refusé', status: 403 };
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (!product.is_free) {
+    if (!keyCode && !userId) return { error: 'Clé ou compte requis', status: 401 };
+    if (keyCode) {
+      const key = db.prepare('SELECT * FROM license_keys WHERE key_code = ?').get(keyCode);
+      if (!key || key.product_id !== product.id) return { error: 'Clé invalide', status: 403 };
+      if (key.status === 'revoked' || key.status === 'blacklisted') return { error: 'Clé révoquée', status: 403 };
+      if (key.expires_at && new Date(key.expires_at) < new Date()) {
+        db.prepare("UPDATE license_keys SET status = 'expired' WHERE id = ?").run(key.id);
+        return { error: 'Clé expirée', status: 403 };
+      }
+    } else {
+      const owned = db.prepare(`
+        SELECT * FROM license_keys WHERE redeemed_by = ? AND product_id = ? AND status = 'active'
+      `).get(userId, product.id);
+      if (!owned) return { error: 'Aucune licence active pour ce produit', status: 403 };
+    }
+  }
+  return { ip, userId };
+}
+
 router.get('/', (_req, res) => {
   const products = db.prepare(`
     SELECT id, slug, name, description, category, price, is_free, in_stock, featured, status, image_url,
            CASE WHEN download_path IS NOT NULL AND download_path != '' THEN 1 ELSE 0 END AS has_build
     FROM products ORDER BY featured DESC, price DESC
   `).all();
-  res.json({ products });
+  res.json({ products: products.map(attachExtras) });
 });
 
 router.get('/:slug', (req, res) => {
@@ -34,7 +88,7 @@ router.get('/:slug', (req, res) => {
     FROM products WHERE slug = ?
   `).get(req.params.slug);
   if (!product) return res.status(404).json({ error: 'Produit introuvable' });
-  res.json({ product });
+  res.json({ product: attachExtras(product) });
 });
 
 router.post('/', adminRequired, (req, res) => {
@@ -146,6 +200,102 @@ router.post('/:slug/keys', adminRequired, (req, res) => {
   });
 });
 
+/* ---- Prix multiples (paliers 1 day / 1 month / lftm …) ---- */
+
+router.get('/:id/prices', (req, res) => {
+  const rows = db.prepare(
+    'SELECT id, label, duration, price, sort FROM product_prices WHERE product_id = ? ORDER BY sort ASC, price ASC'
+  ).all(req.params.id);
+  res.json({ prices: rows });
+});
+
+router.post('/:id/prices', adminRequired, (req, res) => {
+  const product = db.prepare('SELECT id FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Produit introuvable' });
+  const { label, duration, price, sort } = req.body || {};
+  if (!label || !duration) return res.status(400).json({ error: 'label et duration requis' });
+  const info = db.prepare(
+    'INSERT INTO product_prices (product_id, label, duration, price, sort) VALUES (?, ?, ?, ?, ?)'
+  ).run(product.id, String(label), String(duration), Number(price) || 0, Number(sort) || 0);
+  res.json({ price: db.prepare('SELECT * FROM product_prices WHERE id = ?').get(info.lastInsertRowid) });
+});
+
+router.patch('/prices/:priceId', adminRequired, (req, res) => {
+  const row = db.prepare('SELECT * FROM product_prices WHERE id = ?').get(req.params.priceId);
+  if (!row) return res.status(404).json({ error: 'Palier introuvable' });
+  const fields = ['label', 'duration', 'price', 'sort'];
+  const updates = [];
+  const values = [];
+  for (const f of fields) {
+    if (req.body[f] !== undefined) {
+      updates.push(`${f} = ?`);
+      values.push(f === 'price' || f === 'sort' ? Number(req.body[f]) || 0 : String(req.body[f]));
+    }
+  }
+  if (!updates.length) return res.json({ price: row });
+  values.push(row.id);
+  db.prepare(`UPDATE product_prices SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  res.json({ price: db.prepare('SELECT * FROM product_prices WHERE id = ?').get(row.id) });
+});
+
+router.delete('/prices/:priceId', adminRequired, (req, res) => {
+  db.prepare('DELETE FROM product_prices WHERE id = ?').run(req.params.priceId);
+  res.json({ ok: true });
+});
+
+/* ---- Bibliothèque de fichiers (plusieurs .exe / versions par produit) ---- */
+
+router.get('/:id/files', (req, res) => {
+  const rows = db.prepare(
+    'SELECT id, label, filename, size, created_at FROM product_files WHERE product_id = ? ORDER BY id DESC'
+  ).all(req.params.id);
+  res.json({ files: rows });
+});
+
+router.post('/:id/files', adminRequired, upload.single('file'), (req, res) => {
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Produit introuvable' });
+  if (!req.file) return res.status(400).json({ error: 'Fichier requis (champ « file »)' });
+  const info = db.prepare(
+    'INSERT INTO product_files (product_id, label, filename, path, size) VALUES (?, ?, ?, ?, ?)'
+  ).run(
+    product.id,
+    (req.body && req.body.label) || null,
+    req.file.originalname || req.file.filename,
+    req.file.path,
+    req.file.size || null
+  );
+  db.prepare('UPDATE products SET in_stock = 1 WHERE id = ?').run(product.id);
+  res.json({ file: db.prepare('SELECT id, label, filename, size, created_at FROM product_files WHERE id = ?').get(info.lastInsertRowid) });
+});
+
+router.delete('/files/:fileId', adminRequired, (req, res) => {
+  const row = db.prepare('SELECT * FROM product_files WHERE id = ?').get(req.params.fileId);
+  if (!row) return res.status(404).json({ error: 'Fichier introuvable' });
+  if (row.path && row.path.startsWith(uploadsDir) && fs.existsSync(row.path)) {
+    try { fs.unlinkSync(row.path); } catch { /* ignore */ }
+  }
+  db.prepare('DELETE FROM product_files WHERE id = ?').run(row.id);
+  res.json({ ok: true });
+});
+
+// Télécharge un fichier précis avec le même contrôle licence que /:slug/download
+router.post('/files/:fileId/download', (req, res) => {
+  const file = db.prepare('SELECT * FROM product_files WHERE id = ?').get(req.params.fileId);
+  if (!file) return res.status(404).json({ error: 'Fichier introuvable' });
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(file.product_id);
+  if (!product) return res.status(404).json({ error: 'Produit introuvable' });
+
+  const check = verifyDownloadAccess(req, product);
+  if (check.error) return res.status(check.status).json({ error: check.error });
+
+  db.prepare('INSERT INTO downloads (user_id, product_id, ip) VALUES (?, ?, ?)').run(check.userId, product.id, check.ip);
+  if (file.path && fs.existsSync(file.path)) {
+    return res.download(file.path, file.filename || `${product.slug}.exe`);
+  }
+  return res.status(410).json({ error: 'Fichier absent du disque' });
+});
+
 router.post('/:id/upload', adminRequired, upload.single('file'), (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Produit introuvable' });
@@ -170,45 +320,10 @@ router.post('/:slug/download', (req, res) => {
   if (!product) return res.status(404).json({ error: 'Produit introuvable' });
   if (!product.in_stock) return res.status(400).json({ error: 'Hors stock' });
 
-  const ip = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.ip;
-  const keyCode = req.body?.key || req.headers['x-license-key'];
-  let userId = null;
+  const check = verifyDownloadAccess(req, product);
+  if (check.error) return res.status(check.status).json({ error: check.error });
 
-  const authHeader = req.headers.authorization || '';
-  if (authHeader.startsWith('Bearer ')) {
-    try {
-      const jwt = require('jsonwebtoken');
-      const payload = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET || 'dev-secret');
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.id);
-      if (user) {
-        if (user.banned) return res.status(403).json({ error: 'Compte banni' });
-        userId = user.id;
-        const ban = isBanned({ discordId: user.discord_id, username: user.username, ip });
-        const bl = isBlacklisted({ discordId: user.discord_id, ip });
-        if (ban || bl) return res.status(403).json({ error: 'Accès refusé' });
-      }
-    } catch { /* ignore */ }
-  }
-
-  if (!product.is_free) {
-    if (!keyCode && !userId) return res.status(401).json({ error: 'Clé ou compte requis' });
-    if (keyCode) {
-      const key = db.prepare('SELECT * FROM license_keys WHERE key_code = ?').get(keyCode);
-      if (!key || key.product_id !== product.id) return res.status(403).json({ error: 'Clé invalide' });
-      if (key.status === 'revoked' || key.status === 'blacklisted') return res.status(403).json({ error: 'Clé révoquée' });
-      if (key.expires_at && new Date(key.expires_at) < new Date()) {
-        db.prepare("UPDATE license_keys SET status = 'expired' WHERE id = ?").run(key.id);
-        return res.status(403).json({ error: 'Clé expirée' });
-      }
-    } else {
-      const owned = db.prepare(`
-        SELECT * FROM license_keys WHERE redeemed_by = ? AND product_id = ? AND status = 'active'
-      `).get(userId, product.id);
-      if (!owned) return res.status(403).json({ error: 'Aucune licence active pour ce produit' });
-    }
-  }
-
-  db.prepare('INSERT INTO downloads (user_id, product_id, ip) VALUES (?, ?, ?)').run(userId, product.id, ip);
+  db.prepare('INSERT INTO downloads (user_id, product_id, ip) VALUES (?, ?, ?)').run(check.userId, product.id, check.ip);
 
   if (product.download_path && fs.existsSync(product.download_path)) {
     return res.download(product.download_path);

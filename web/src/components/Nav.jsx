@@ -23,6 +23,7 @@ export default function Nav() {
           </button>
           <nav className={`nav-links ${open ? 'open' : ''}`} onClick={() => setOpen(false)}>
             <a href="/#products">Products</a>
+            <Link to="/status">Status</Link>
             <a href="/#reviews">Reviews</a>
             <a href="/#faq">FAQ</a>
             <Link to="/downloads">Downloads</Link>

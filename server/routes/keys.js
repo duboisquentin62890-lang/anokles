@@ -135,14 +135,16 @@ router.post('/redeem', authRequired, (req, res) => {
     return res.status(400).json({ error: `Clé déjà utilisée (${row.status})` });
   }
 
+  const ip = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip;
+
   // durée en jours (fractionnaire possible pour HOURS) → ms
   const expires = new Date(Date.now() + row.duration_days * 86400000);
 
   db.prepare(`
     UPDATE license_keys
-    SET status = 'active', redeemed_by = ?, redeemed_at = datetime('now'), expires_at = ?, hwid = COALESCE(?, hwid)
+    SET status = 'active', redeemed_by = ?, redeemed_at = datetime('now'), expires_at = ?, hwid = COALESCE(?, hwid), ip = COALESCE(ip, ?)
     WHERE id = ?
-  `).run(req.user.id, expires.toISOString(), hwid || null, row.id);
+  `).run(req.user.id, expires.toISOString(), hwid || null, ip || null, row.id);
 
   const product = db.prepare('SELECT id, name, slug FROM products WHERE id = ?').get(row.product_id);
   res.json({
@@ -176,6 +178,82 @@ router.delete('/:id', adminRequired, (req, res) => {
   res.json({ ok: true });
 });
 
+// Blacklist la clé (≠ revoke) : entrée blacklist + statut. Option { ip:true } → BL aussi l'IP.
+router.post('/:id/blacklist', adminRequired, (req, res) => {
+  const row = db.prepare('SELECT * FROM license_keys WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Clé introuvable' });
+  const reason = (req.body && req.body.reason) || 'Blacklisted via panel';
+  try {
+    db.prepare('INSERT OR IGNORE INTO blacklist (type, value, reason, created_by) VALUES (?, ?, ?, ?)')
+      .run('key', row.key_code, reason, req.user.username);
+    if (req.body && req.body.ip && row.ip) {
+      db.prepare('INSERT OR IGNORE INTO blacklist (type, value, reason, created_by) VALUES (?, ?, ?, ?)')
+        .run('ip', row.ip, `Key ${row.key_code}`, req.user.username);
+    }
+    if (row.hwid) {
+      db.prepare('INSERT OR IGNORE INTO blacklist (type, value, reason, created_by) VALUES (?, ?, ?, ?)')
+        .run('hwid', row.hwid, `Key ${row.key_code}`, req.user.username);
+    }
+  } catch { /* déjà blacklist */ }
+  db.prepare("UPDATE license_keys SET status = 'blacklisted' WHERE id = ?").run(row.id);
+  res.json({ ok: true, key: db.prepare('SELECT * FROM license_keys WHERE id = ?').get(row.id) });
+});
+
+// Retire la clé de la blacklist et lui rend un statut cohérent.
+router.post('/:id/unblacklist', adminRequired, (req, res) => {
+  const row = db.prepare('SELECT * FROM license_keys WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Clé introuvable' });
+  db.prepare("DELETE FROM blacklist WHERE type = 'key' AND value = ?").run(row.key_code);
+  const status = row.redeemed_at ? 'active' : 'unused';
+  db.prepare('UPDATE license_keys SET status = ? WHERE id = ?').run(status, row.id);
+  res.json({ ok: true, key: db.prepare('SELECT * FROM license_keys WHERE id = ?').get(row.id) });
+});
+
+// Ban l'IP associée à la clé.
+router.post('/:id/ban-ip', adminRequired, (req, res) => {
+  const row = db.prepare('SELECT * FROM license_keys WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Clé introuvable' });
+  if (!row.ip) return res.status(400).json({ error: 'Aucune IP enregistrée pour cette clé' });
+  try {
+    db.prepare('INSERT OR IGNORE INTO blacklist (type, value, reason, created_by) VALUES (?, ?, ?, ?)')
+      .run('ip', row.ip, (req.body && req.body.reason) || `Key ${row.key_code}`, req.user.username);
+  } catch { /* déjà */ }
+  res.json({ ok: true, ip: row.ip });
+});
+
+// Opérations de masse : delete / revoke / blacklist, par liste d'ids OU par statut.
+router.post('/bulk', adminRequired, (req, res) => {
+  const { action, ids, status } = req.body || {};
+  if (!['delete', 'revoke', 'blacklist'].includes(action)) {
+    return res.status(400).json({ error: 'action invalide (delete|revoke|blacklist)' });
+  }
+  let rows = [];
+  if (Array.isArray(ids) && ids.length) {
+    const ph = ids.map(() => '?').join(',');
+    rows = db.prepare(`SELECT * FROM license_keys WHERE id IN (${ph})`).all(...ids);
+  } else if (status) {
+    rows = db.prepare('SELECT * FROM license_keys WHERE status = ?').all(status);
+  } else {
+    return res.status(400).json({ error: 'Fournis ids[] ou status' });
+  }
+
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      if (action === 'delete') {
+        db.prepare('DELETE FROM license_keys WHERE id = ?').run(row.id);
+      } else if (action === 'revoke') {
+        db.prepare("UPDATE license_keys SET status = 'revoked' WHERE id = ?").run(row.id);
+      } else if (action === 'blacklist') {
+        db.prepare('INSERT OR IGNORE INTO blacklist (type, value, reason, created_by) VALUES (?, ?, ?, ?)')
+          .run('key', row.key_code, 'Bulk blacklist', req.user.username);
+        db.prepare("UPDATE license_keys SET status = 'blacklisted' WHERE id = ?").run(row.id);
+      }
+    }
+  });
+  tx();
+  res.json({ ok: true, affected: rows.length });
+});
+
 /* ---------------------------------------------------------------------------
  * Vérification pour le LOADER C++ (machine-to-machine, pas de JWT).
  * POST /api/keys/verify  { key, hwid }
@@ -200,8 +278,16 @@ router.post('/verify', (req, res) => {
   const productRef = req.body && req.body.product; // slug ou id du loader appelant (optionnel mais recommandé)
   if (!key || !hwid) return res.status(400).json({ valid: false, reason: 'key_and_hwid_required' });
 
+  const ip = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip;
+
   const row = db.prepare('SELECT * FROM license_keys WHERE key_code = ?').get(key);
   if (!row) return res.json({ valid: false, reason: 'not_found' });
+
+  // Enregistre l'IP à la 1ʳᵉ vue (utile pour BL / audit côté panel)
+  if (!row.ip && ip) {
+    db.prepare('UPDATE license_keys SET ip = ? WHERE id = ?').run(ip, row.id);
+    row.ip = ip;
+  }
 
   // Vérifie que la clé appartient bien au produit du loader qui l'utilise
   if (productRef !== undefined && productRef !== null && String(productRef).length) {

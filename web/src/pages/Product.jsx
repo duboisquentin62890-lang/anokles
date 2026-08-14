@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, downloadProduct } from '../lib/api';
+import { api, downloadProduct, downloadFile } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
 export default function Product() {
@@ -8,13 +8,17 @@ export default function Product() {
   const { user } = useAuth();
   const [product, setProduct] = useState(null);
   const [key, setKey] = useState('');
+  const [selPrice, setSelPrice] = useState(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     api(`/api/products/${slug}`)
-      .then((d) => setProduct(d.product))
+      .then((d) => {
+        setProduct(d.product);
+        if (d.product?.prices?.length) setSelPrice(d.product.prices[0].id);
+      })
       .catch((e) => setErr(e.message));
   }, [slug]);
 
@@ -32,6 +36,17 @@ export default function Product() {
     }
   }
 
+  async function onDownloadFile(f) {
+    setErr('');
+    setMsg('');
+    try {
+      await downloadFile(f.id, { key: key || undefined, fallbackName: f.filename });
+      setMsg(`Téléchargement : ${f.label || f.filename}`);
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
   if (err && !product) {
     return (
       <div className="container section">
@@ -44,6 +59,14 @@ export default function Product() {
   if (!product) {
     return <div className="container section muted">Chargement…</div>;
   }
+
+  const prices = product.prices || [];
+  const files = product.files || [];
+  const chosen = prices.find((p) => p.id === selPrice) || null;
+  const displayPrice = product.is_free
+    ? 'Free'
+    : `$${Number(chosen ? chosen.price : (product.price_from ?? product.price)).toFixed(2)}`;
+  const priceLead = !product.is_free && !chosen && prices.length ? 'À partir de ' : '';
 
   return (
     <div className="container section">
@@ -86,8 +109,55 @@ export default function Product() {
 
         <div className="card-plain" style={{ position: 'sticky', top: '90px' }}>
           <div className="price" style={{ fontSize: '2rem', fontFamily: 'var(--font-display)', letterSpacing: '0.04em', marginBottom: '1rem' }}>
-            {product.is_free ? 'Free' : `$${Number(product.price).toFixed(2)}`}
+            <span style={{ fontSize: '0.9rem', fontFamily: 'var(--font-body)', letterSpacing: 0 }} className="muted">{priceLead}</span>
+            {displayPrice}
           </div>
+
+          {!product.is_free && prices.length ? (
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div className="eyebrow" style={{ marginBottom: '0.6rem' }}>Variants :</div>
+              <div style={{ display: 'grid', gap: '0.6rem' }}>
+                {prices.map((p) => {
+                  const active = selPrice === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setSelPrice(p.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        width: '100%',
+                        padding: '0.9rem 1rem',
+                        borderRadius: 'var(--radius)',
+                        border: `1px solid ${active ? 'var(--red, #e10600)' : 'var(--line)'}`,
+                        background: active ? 'rgba(225,6,0,0.06)' : 'transparent',
+                        color: 'inherit',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'border-color .15s ease, background .15s ease',
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>{p.label}</span>
+                      <span
+                        style={{
+                          background: 'rgba(255,255,255,0.06)',
+                          padding: '0.3rem 0.7rem',
+                          borderRadius: '8px',
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-display)',
+                        }}
+                      >
+                        ${Number(p.price).toFixed(2)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           {err ? <div className="alert">{err}</div> : null}
           {msg ? <div className="alert" style={{ borderColor: 'rgba(80,200,120,0.4)' }}>{msg}</div> : null}
 
@@ -121,6 +191,26 @@ export default function Product() {
               {loading ? '...' : 'Download free'}
             </button>
           )}
+
+          {files.length ? (
+            <div style={{ marginTop: '1.25rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
+              <div className="eyebrow" style={{ marginBottom: '0.5rem' }}>Versions disponibles</div>
+              <div style={{ display: 'grid', gap: '0.4rem' }}>
+                {files.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className="btn"
+                    style={{ justifyContent: 'space-between', display: 'flex', width: '100%' }}
+                    onClick={() => onDownloadFile(f)}
+                  >
+                    <span>⬇ {f.label || f.filename}</span>
+                    {f.size ? <span className="muted" style={{ fontSize: '0.8rem' }}>{(f.size / 1048576).toFixed(1)} Mo</span> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

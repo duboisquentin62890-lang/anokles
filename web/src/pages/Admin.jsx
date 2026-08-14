@@ -58,6 +58,7 @@ export default function Admin() {
     slug: '', name: '', description: '', category: 'General', price: 0, is_free: false, featured: false, status: 'undetected',
   });
   const [editId, setEditId] = useState(null);
+  const [priceForm, setPriceForm] = useState({ label: '', duration: 'month', price: 0 });
   const [q, setQ] = useState('');
   const [generated, setGenerated] = useState([]);
 
@@ -139,6 +140,28 @@ export default function Admin() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Upload impossible');
       setMsg(`Build « ${data.file} » uploadé · le produit est téléchargeable`);
+      await loadAll();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
+  async function uploadFileLib(productId, file, label) {
+    if (!file) return;
+    setErr('');
+    setMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      if (label) fd.append('label', label);
+      const res = await fetch(`/api/products/${productId}/files`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('tkr_token')}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Upload impossible');
+      setMsg(`Fichier « ${data.file?.filename} » ajouté`);
       await loadAll();
     } catch (e) {
       setErr(e.message);
@@ -325,10 +348,34 @@ export default function Admin() {
                   Search
                   <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="key / discord / hwid" />
                 </label>
-                <div style={{ display: 'flex', alignItems: 'end' }}>
+                <div style={{ display: 'flex', alignItems: 'end', gap: '0.35rem' }}>
                   <button className="btn btn-ghost" type="submit">Filter</button>
                 </div>
               </form>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  onClick={() => runKeys(async () => {
+                    if (typeof window !== 'undefined' && !window.confirm('Supprimer TOUTES les clés unused ?')) return;
+                    const r = await api('/api/keys/bulk', { method: 'POST', body: { action: 'delete', status: 'unused' } });
+                    setMsg(`${r.affected} clé(s) unused supprimée(s)`);
+                  })}
+                >
+                  Delete all unused
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  onClick={() => runKeys(async () => {
+                    if (typeof window !== 'undefined' && !window.confirm('Blacklist TOUTES les clés actives ?')) return;
+                    const r = await api('/api/keys/bulk', { method: 'POST', body: { action: 'blacklist', status: 'active' } });
+                    setMsg(`${r.affected} clé(s) active(s) blacklist`);
+                  })}
+                >
+                  BL all active
+                </button>
+              </div>
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -338,6 +385,7 @@ export default function Admin() {
                       <th>Status</th>
                       <th>Durée</th>
                       <th>HWID</th>
+                      <th>IP</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -349,7 +397,8 @@ export default function Admin() {
                         <td><span className={`tag ${k.status === 'active' ? 'ok' : k.status === 'unused' ? 'warn' : 'bad'}`}>{k.status}</span></td>
                         <td>{durationLabel(k)}</td>
                         <td>{k.hwid || '—'}</td>
-                        <td style={{ display: 'flex', gap: '0.35rem' }}>
+                        <td>{k.ip || '—'}</td>
+                        <td style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                           <button
                             className="btn btn-ghost btn-sm"
                             type="button"
@@ -369,6 +418,53 @@ export default function Admin() {
                             })}
                           >
                             Revoke
+                          </button>
+                          {k.status === 'blacklisted' ? (
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              type="button"
+                              onClick={() => runKeys(async () => {
+                                await api(`/api/keys/${k.id}/unblacklist`, { method: 'POST' });
+                                setMsg('Retirée de la BL');
+                              })}
+                            >
+                              Un-BL
+                            </button>
+                          ) : (
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              type="button"
+                              onClick={() => runKeys(async () => {
+                                const alsoIp = typeof window !== 'undefined' && window.confirm('Blacklist aussi l\'IP de cette clé ?');
+                                await api(`/api/keys/${k.id}/blacklist`, { method: 'POST', body: { ip: alsoIp } });
+                                setMsg('Clé blacklist');
+                              })}
+                            >
+                              Blacklist
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            type="button"
+                            disabled={!k.ip}
+                            onClick={() => runKeys(async () => {
+                              await api(`/api/keys/${k.id}/ban-ip`, { method: 'POST' });
+                              setMsg('IP bannie');
+                            })}
+                          >
+                            Ban IP
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            type="button"
+                            style={{ background: 'rgba(225,6,0,0.15)', borderColor: 'rgba(225,6,0,0.5)', color: '#ff6b6b' }}
+                            onClick={() => runKeys(async () => {
+                              if (typeof window !== 'undefined' && !window.confirm(`Supprimer la clé ${k.key_code} ?`)) return;
+                              await api(`/api/keys/${k.id}`, { method: 'DELETE' });
+                              setMsg('Clé supprimée');
+                            })}
+                          >
+                            Del
                           </button>
                         </td>
                       </tr>
@@ -436,6 +532,122 @@ export default function Admin() {
                 </div>
               </form>
             </div>
+
+            {editId ? (() => {
+              const edited = products.find((p) => p.id === editId);
+              const prices = edited?.prices || [];
+              const files = edited?.files || [];
+              return (
+                <>
+                  <div className="card-plain">
+                    <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', marginBottom: '0.75rem' }}>
+                      Paliers de prix — {edited?.name}
+                    </h3>
+                    <form
+                      className="form-row"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        run(async () => {
+                          if (!priceForm.label) throw new Error('Label requis');
+                          await api(`/api/products/${editId}/prices`, { method: 'POST', body: { ...priceForm, price: Number(priceForm.price) || 0 } });
+                          setPriceForm({ label: '', duration: 'month', price: 0 });
+                          setMsg('Palier ajouté');
+                        });
+                      }}
+                      style={{ marginBottom: '1rem' }}
+                    >
+                      <label>Label<input value={priceForm.label} onChange={(e) => setPriceForm({ ...priceForm, label: e.target.value })} placeholder="1 mois" /></label>
+                      <label>
+                        Durée
+                        <select value={priceForm.duration} onChange={(e) => setPriceForm({ ...priceForm, duration: e.target.value })}>
+                          {DURATION_PRESETS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                        </select>
+                      </label>
+                      <label>Prix €<input type="number" step="0.01" value={priceForm.price} onChange={(e) => setPriceForm({ ...priceForm, price: e.target.value })} /></label>
+                      <div style={{ display: 'flex', alignItems: 'end' }}>
+                        <button className="btn btn-primary btn-sm" type="submit">+ Palier</button>
+                      </div>
+                    </form>
+                    {prices.length ? (
+                      <div className="table-wrap">
+                        <table>
+                          <thead><tr><th>Label</th><th>Durée</th><th>Prix</th><th></th></tr></thead>
+                          <tbody>
+                            {prices.map((pr) => (
+                              <tr key={pr.id}>
+                                <td>{pr.label}</td>
+                                <td>{pr.duration}</td>
+                                <td>${Number(pr.price).toFixed(2)}</td>
+                                <td>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    type="button"
+                                    onClick={() => run(async () => {
+                                      await api(`/api/products/prices/${pr.id}`, { method: 'DELETE' });
+                                      setMsg('Palier supprimé');
+                                    })}
+                                  >
+                                    Suppr.
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : <p className="muted">Aucun palier — le prix unique du produit est utilisé.</p>}
+                  </div>
+
+                  <div className="card-plain">
+                    <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', marginBottom: '0.75rem' }}>
+                      Fichiers / versions — {edited?.name}
+                    </h3>
+                    <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', marginBottom: '1rem', display: 'inline-block' }}>
+                      + Ajouter un fichier
+                      <input
+                        type="file"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = '';
+                          const label = typeof window !== 'undefined' ? window.prompt('Nom / version (optionnel) :', f?.name || '') : '';
+                          uploadFileLib(editId, f, label || undefined);
+                        }}
+                      />
+                    </label>
+                    {files.length ? (
+                      <div className="table-wrap">
+                        <table>
+                          <thead><tr><th>Label</th><th>Fichier</th><th>Taille</th><th></th></tr></thead>
+                          <tbody>
+                            {files.map((f) => (
+                              <tr key={f.id}>
+                                <td>{f.label || '—'}</td>
+                                <td><code>{f.filename}</code></td>
+                                <td>{f.size ? `${(f.size / 1048576).toFixed(1)} Mo` : '—'}</td>
+                                <td>
+                                  <button
+                                    className="btn btn-sm"
+                                    type="button"
+                                    style={{ background: 'rgba(225,6,0,0.15)', borderColor: 'rgba(225,6,0,0.5)', color: '#ff6b6b' }}
+                                    onClick={() => run(async () => {
+                                      await api(`/api/products/files/${f.id}`, { method: 'DELETE' });
+                                      setMsg('Fichier supprimé');
+                                    })}
+                                  >
+                                    Suppr.
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : <p className="muted">Aucun fichier hébergé pour ce produit.</p>}
+                  </div>
+                </>
+              );
+            })() : null}
             <div className="table-wrap">
               <table>
                 <thead>
