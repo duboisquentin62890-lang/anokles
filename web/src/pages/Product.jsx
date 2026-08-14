@@ -9,6 +9,7 @@ export default function Product() {
   const [product, setProduct] = useState(null);
   const [key, setKey] = useState('');
   const [selPrice, setSelPrice] = useState(null);
+  const [activeImg, setActiveImg] = useState(0);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
@@ -62,6 +63,8 @@ export default function Product() {
 
   const prices = product.prices || [];
   const files = product.files || [];
+  const images = product.images || [];
+  const mainImage = images.length ? (images[activeImg] || images[0]).url : product.image_url;
   const chosen = prices.find((p) => p.id === selPrice) || null;
   const displayPrice = product.is_free
     ? 'Free'
@@ -84,15 +87,43 @@ export default function Product() {
         <div>
           <div
             className="product-media"
-            style={{ height: 240, borderRadius: 'var(--radius)', border: '1px solid var(--line)' }}
+            style={{
+              height: 240,
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--line)',
+              ...(mainImage ? { backgroundImage: `url("${mainImage}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+            }}
           >
             {product.featured ? <span className="badge hot">Best Seller</span>
               : <span className={`badge ${product.is_free ? 'free' : ''}`}>{product.is_free ? 'Free' : product.status}</span>}
             <span className={`stock ${product.in_stock ? '' : 'out'}`}>
               <span className="dot" /> {product.in_stock ? 'In stock' : 'Out of stock'}
             </span>
-            <span className="glyph">{(product.name || '?').slice(0, 2).toUpperCase()}</span>
+            {mainImage ? null : <span className="glyph">{(product.name || '?').slice(0, 2).toUpperCase()}</span>}
           </div>
+          {images.length > 1 ? (
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+              {images.map((img, i) => (
+                <button
+                  key={img.id}
+                  type="button"
+                  onClick={() => setActiveImg(i)}
+                  style={{
+                    width: 76,
+                    height: 52,
+                    padding: 0,
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    border: `2px solid ${i === activeImg ? 'var(--red, #e10600)' : 'var(--line)'}`,
+                    background: 'transparent',
+                  }}
+                >
+                  <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="eyebrow" style={{ marginTop: '1.5rem' }}>{product.category}</div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(2.2rem,5vw,3.4rem)', letterSpacing: '0.04em' }}>
             {product.name}

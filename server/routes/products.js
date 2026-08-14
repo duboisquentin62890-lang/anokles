@@ -18,6 +18,20 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 300 * 1024 * 1024 } });
 
+// Upload d'images de preview (admin) → server/uploads/img-<id>-<ts>.<ext>
+const imgStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = (path.extname(file.originalname || '').slice(0, 8) || '.png').toLowerCase();
+    cb(null, `img-${req.params.id}-${Date.now()}${ext}`);
+  },
+});
+const imgUpload = multer({
+  storage: imgStorage,
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, /^image\//.test(file.mimetype || '')),
+});
+
 function attachExtras(product) {
   if (!product) return product;
   const prices = db.prepare(
@@ -26,8 +40,13 @@ function attachExtras(product) {
   const files = db.prepare(
     'SELECT id, label, filename, size FROM product_files WHERE product_id = ? ORDER BY id DESC'
   ).all(product.id);
+  const images = db.prepare(
+    'SELECT id, url, sort FROM product_images WHERE product_id = ? ORDER BY sort ASC, id ASC'
+  ).all(product.id);
   const priceFrom = prices.length ? Math.min(...prices.map((p) => p.price)) : product.price;
-  return { ...product, prices, files, price_from: priceFrom };
+  // Image principale = image_url si définie, sinon 1ʳᵉ image de la galerie
+  const mainImage = product.image_url || (images[0] ? images[0].url : null);
+  return { ...product, prices, files, images, image_url: mainImage, price_from: priceFrom };
 }
 
 // Contrôle licence partagé (compte JWT OU clé) — renvoie {ip,userId} ou {error,status}
@@ -294,6 +313,49 @@ router.post('/files/:fileId/download', (req, res) => {
     return res.download(file.path, file.filename || `${product.slug}.exe`);
   }
   return res.status(410).json({ error: 'Fichier absent du disque' });
+});
+
+/* ---- Galerie d'images de preview (plusieurs images par produit) ---- */
+
+router.get('/:id/images', (req, res) => {
+  const rows = db.prepare(
+    'SELECT id, url, sort FROM product_images WHERE product_id = ? ORDER BY sort ASC, id ASC'
+  ).all(req.params.id);
+  res.json({ images: rows });
+});
+
+// Ajoute une image par URL (body.url) OU par upload (champ « file »)
+router.post('/:id/images', adminRequired, imgUpload.single('file'), (req, res) => {
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Produit introuvable' });
+  let url = (req.body && req.body.url && String(req.body.url).trim()) || null;
+  if (req.file) url = `/uploads/${req.file.filename}`;
+  if (!url) return res.status(400).json({ error: 'URL ou fichier image requis' });
+  const sort = Number(req.body && req.body.sort) || 0;
+  const info = db.prepare(
+    'INSERT INTO product_images (product_id, url, sort) VALUES (?, ?, ?)'
+  ).run(product.id, url, sort);
+  // Si le produit n'a pas encore d'image principale, on l'y met.
+  if (!product.image_url) db.prepare('UPDATE products SET image_url = ? WHERE id = ?').run(url, product.id);
+  res.json({ image: db.prepare('SELECT id, url, sort FROM product_images WHERE id = ?').get(info.lastInsertRowid) });
+});
+
+router.delete('/images/:imageId', adminRequired, (req, res) => {
+  const row = db.prepare('SELECT * FROM product_images WHERE id = ?').get(req.params.imageId);
+  if (!row) return res.status(404).json({ error: 'Image introuvable' });
+  // Supprime le fichier disque si c'était un upload local
+  if (row.url && row.url.startsWith('/uploads/')) {
+    const p = path.join(uploadsDir, path.basename(row.url));
+    if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch { /* ignore */ } }
+  }
+  db.prepare('DELETE FROM product_images WHERE id = ?').run(row.id);
+  // Si c'était l'image principale, on repointe sur la 1ʳᵉ image restante
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(row.product_id);
+  if (product && product.image_url === row.url) {
+    const next = db.prepare('SELECT url FROM product_images WHERE product_id = ? ORDER BY sort ASC, id ASC').get(row.product_id);
+    db.prepare('UPDATE products SET image_url = ? WHERE id = ?').run(next ? next.url : null, row.product_id);
+  }
+  res.json({ ok: true });
 });
 
 router.post('/:id/upload', adminRequired, upload.single('file'), (req, res) => {

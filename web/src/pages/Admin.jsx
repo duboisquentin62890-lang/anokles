@@ -168,6 +168,27 @@ export default function Admin() {
     }
   }
 
+  async function uploadImage(productId, file) {
+    if (!file) return;
+    setErr('');
+    setMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/products/${productId}/images`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('tkr_token')}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Upload impossible');
+      setMsg('Image ajoutée');
+      await loadAll();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
   const emptyProduct = {
     slug: '', name: '', description: '', category: 'General', price: 0, is_free: false, featured: false, status: 'undetected',
   };
@@ -537,8 +558,69 @@ export default function Admin() {
               const edited = products.find((p) => p.id === editId);
               const prices = edited?.prices || [];
               const files = edited?.files || [];
+              const images = edited?.images || [];
               return (
                 <>
+                  <div className="card-plain">
+                    <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', marginBottom: '0.75rem' }}>
+                      Images de preview — {edited?.name}
+                    </h3>
+                    <p className="muted" style={{ marginBottom: '0.75rem' }}>
+                      La 1ʳᵉ image sert de vignette dans le store. Les suivantes s'affichent dans la galerie de la page produit.
+                    </p>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                      <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', display: 'inline-block' }}>
+                        + Uploader une image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            uploadImage(editId, f);
+                          }}
+                        />
+                      </label>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        type="button"
+                        onClick={() => run(async () => {
+                          const url = typeof window !== 'undefined' ? window.prompt('URL de l\'image :') : '';
+                          if (!url) return;
+                          await api(`/api/products/${editId}/images`, { method: 'POST', body: { url } });
+                          setMsg('Image ajoutée');
+                        })}
+                      >
+                        + Ajouter par URL
+                      </button>
+                    </div>
+                    {images.length ? (
+                      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        {images.map((img) => (
+                          <div key={img.id} style={{ position: 'relative', width: 120 }}>
+                            <img
+                              src={img.url}
+                              alt=""
+                              style={{ width: 120, height: 80, objectFit: 'cover', borderRadius: 'var(--radius)', border: '1px solid var(--line)' }}
+                            />
+                            <button
+                              className="btn btn-sm"
+                              type="button"
+                              style={{ position: 'absolute', top: 4, right: 4, padding: '0.1rem 0.4rem', background: 'rgba(225,6,0,0.85)', borderColor: 'transparent', color: '#fff' }}
+                              onClick={() => run(async () => {
+                                await api(`/api/products/images/${img.id}`, { method: 'DELETE' });
+                                setMsg('Image supprimée');
+                              })}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <p className="muted">Aucune image — vignette texte par défaut.</p>}
+                  </div>
+
                   <div className="card-plain">
                     <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', marginBottom: '0.75rem' }}>
                       Paliers de prix — {edited?.name}

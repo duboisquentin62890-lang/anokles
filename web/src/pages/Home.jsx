@@ -188,13 +188,16 @@ export default function Home() {
           <div className="product-grid">
             {visible.map((p) => (
               <article key={p.id} className="product reveal">
-                <div className="product-media">
+                <div
+                  className="product-media"
+                  style={p.image_url ? { backgroundImage: `url("${p.image_url}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                >
                   {p.featured ? <span className="badge hot">Best Seller</span>
                     : <span className={`badge ${p.is_free ? 'free' : ''}`}>{p.is_free ? 'Free' : p.status}</span>}
                   <span className={`stock ${p.in_stock ? '' : 'out'}`}>
                     <span className="dot" /> {p.in_stock ? 'In stock' : 'Out of stock'}
                   </span>
-                  <span className="glyph">{(p.name || '?').slice(0, 2).toUpperCase()}</span>
+                  {p.image_url ? null : <span className="glyph">{(p.name || '?').slice(0, 2).toUpperCase()}</span>}
                 </div>
                 <div className="product-body">
                   <h3>{p.name}</h3>
