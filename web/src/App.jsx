@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Downloads from './pages/Downloads';
 import Status from './pages/Status';
 import Admin from './pages/Admin';
+import Reseller from './pages/Reseller';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/status" element={<Status />} />
         <Route path="/Status" element={<Status />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/reseller" element={<Reseller />} />
       </Routes>
     </>
   );

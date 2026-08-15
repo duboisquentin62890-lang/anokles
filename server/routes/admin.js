@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { adminRequired } = require('../auth');
 
@@ -140,6 +141,84 @@ router.get('/downloads', adminRequired, (_req, res) => {
     ORDER BY d.id DESC LIMIT 200
   `).all();
   res.json({ downloads });
+});
+
+/* ---- Resellers (rebrand : comptes qui génèrent leurs propres clés) ---- */
+
+// Liste des resellers + quota + conso + produits assignés
+router.get('/resellers', adminRequired, (_req, res) => {
+  const resellers = db.prepare(`
+    SELECT id, username, key_quota, banned, created_at
+    FROM users WHERE role = 'reseller' ORDER BY id DESC
+  `).all();
+  const out = resellers.map((r) => {
+    const used = db.prepare('SELECT COUNT(*) AS c FROM license_keys WHERE created_by = ?').get(r.username).c;
+    const products = db.prepare('SELECT product_id FROM reseller_products WHERE user_id = ?').all(r.id).map((x) => x.product_id);
+    return { ...r, keys_used: used, product_ids: products };
+  });
+  res.json({ resellers: out });
+});
+
+// Crée un compte reseller
+router.post('/resellers', adminRequired, (req, res) => {
+  const { username, password, key_quota = 0 } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'username et password requis' });
+  const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (exists) return res.status(400).json({ error: 'Nom déjà pris' });
+  const info = db.prepare(
+    "INSERT INTO users (username, password_hash, role, key_quota) VALUES (?, ?, 'reseller', ?)"
+  ).run(username, bcrypt.hashSync(String(password), 10), Number(key_quota) || 0);
+  res.json({ reseller: db.prepare('SELECT id, username, role, key_quota, banned, created_at FROM users WHERE id = ?').get(info.lastInsertRowid) });
+});
+
+// Modifie quota / mot de passe
+router.patch('/resellers/:id', adminRequired, (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'reseller'").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Reseller introuvable' });
+  if (req.body.key_quota !== undefined) {
+    db.prepare('UPDATE users SET key_quota = ? WHERE id = ?').run(Number(req.body.key_quota) || 0, user.id);
+  }
+  if (req.body.password) {
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(String(req.body.password), 10), user.id);
+  }
+  res.json({ reseller: db.prepare('SELECT id, username, role, key_quota, banned FROM users WHERE id = ?').get(user.id) });
+});
+
+// Suspend / réactive (banned)
+router.post('/resellers/:id/suspend', adminRequired, (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'reseller'").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Reseller introuvable' });
+  const banned = user.banned ? 0 : 1;
+  db.prepare('UPDATE users SET banned = ?, ban_reason = ? WHERE id = ?')
+    .run(banned, banned ? 'Reseller suspendu' : null, user.id);
+  res.json({ ok: true, banned });
+});
+
+// Supprime le compte reseller
+router.delete('/resellers/:id', adminRequired, (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'reseller'").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Reseller introuvable' });
+  db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+  res.json({ ok: true });
+});
+
+// Assigne un produit au reseller
+router.post('/resellers/:id/products', adminRequired, (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'reseller'").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Reseller introuvable' });
+  const productId = Number(req.body && req.body.product_id);
+  if (!productId) return res.status(400).json({ error: 'product_id requis' });
+  const product = db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
+  if (!product) return res.status(404).json({ error: 'Produit introuvable' });
+  db.prepare('INSERT OR IGNORE INTO reseller_products (user_id, product_id) VALUES (?, ?)').run(user.id, productId);
+  res.json({ ok: true });
+});
+
+// Retire un produit assigné
+router.delete('/resellers/:id/products/:productId', adminRequired, (req, res) => {
+  db.prepare('DELETE FROM reseller_products WHERE user_id = ? AND product_id = ?')
+    .run(req.params.id, req.params.productId);
+  res.json({ ok: true });
 });
 
 module.exports = { router, setDiscordBanHandler };

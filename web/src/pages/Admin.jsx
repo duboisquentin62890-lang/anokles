@@ -7,6 +7,8 @@ const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'keys', label: 'Keys' },
   { id: 'products', label: 'Products' },
+  { id: 'resellers', label: 'Resellers' },
+  { id: 'files', label: 'Files' },
   { id: 'blacklist', label: 'Blacklist' },
   { id: 'bans', label: 'Bans' },
   { id: 'users', label: 'Users' },
@@ -47,6 +49,9 @@ export default function Admin() {
   const [blacklist, setBlacklist] = useState([]);
   const [bans, setBans] = useState([]);
   const [users, setUsers] = useState([]);
+  const [resellers, setResellers] = useState([]);
+  const [hostedFiles, setHostedFiles] = useState([]);
+  const [resellerForm, setResellerForm] = useState({ username: '', password: '', key_quota: 0 });
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [keyForm, setKeyForm] = useState({ duration: 'month', quantity: 1, amount: 1, note: '' });
@@ -65,13 +70,15 @@ export default function Admin() {
   const isStaff = user && (user.role === 'admin' || user.role === 'staff');
 
   async function loadAll() {
-    const [s, p, k, bl, b, u] = await Promise.all([
+    const [s, p, k, bl, b, u, rs, hf] = await Promise.all([
       api('/api/admin/stats'),
       api('/api/products'),
       api(`/api/keys${q ? `?q=${encodeURIComponent(q)}` : ''}`),
       api('/api/admin/blacklist'),
       api('/api/admin/bans'),
       api('/api/admin/users'),
+      api('/api/admin/resellers'),
+      api('/api/files'),
     ]);
     setStats(s.stats);
     setProducts(p.products || []);
@@ -79,6 +86,8 @@ export default function Admin() {
     setBlacklist(bl.entries || []);
     setBans(b.bans || []);
     setUsers(u.users || []);
+    setResellers(rs.resellers || []);
+    setHostedFiles(hf.files || []);
   }
 
   useEffect(() => {
@@ -183,6 +192,28 @@ export default function Admin() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Upload impossible');
       setMsg('Image ajoutée');
+      await loadAll();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
+  async function uploadHostedFile(file, name) {
+    if (!file) return;
+    setErr('');
+    setMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      if (name) fd.append('name', name);
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('tkr_token')}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Upload impossible');
+      setMsg(`Fichier hébergé · lien ${data.link}`);
       await loadAll();
     } catch (e) {
       setErr(e.message);
@@ -802,6 +833,160 @@ export default function Admin() {
               </table>
             </div>
           </>
+        ) : null}
+
+        {tab === 'resellers' ? (
+          <>
+            <div className="card-plain">
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', marginBottom: '0.5rem' }}>
+                Nouveau reseller (rebrand)
+              </h3>
+              <p className="muted" style={{ marginBottom: '1rem' }}>
+                Un reseller peut générer ses propres clés — seulement pour les produits que tu lui assignes, dans la limite de son quota (0 = illimité).
+              </p>
+              <form
+                className="form wide"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  run(async () => {
+                    await api('/api/admin/resellers', { method: 'POST', body: { ...resellerForm, key_quota: Number(resellerForm.key_quota) || 0 } });
+                    setResellerForm({ username: '', password: '', key_quota: 0 });
+                    setMsg('Reseller créé');
+                  });
+                }}
+              >
+                <div className="form-row">
+                  <label>Username<input value={resellerForm.username} onChange={(e) => setResellerForm({ ...resellerForm, username: e.target.value })} required /></label>
+                  <label>Password<input type="text" value={resellerForm.password} onChange={(e) => setResellerForm({ ...resellerForm, password: e.target.value })} required /></label>
+                  <label>Quota clés<input type="number" min="0" value={resellerForm.key_quota} onChange={(e) => setResellerForm({ ...resellerForm, key_quota: e.target.value })} /></label>
+                </div>
+                <button className="btn btn-primary" type="submit">+ Créer</button>
+              </form>
+            </div>
+            {resellers.map((r) => (
+              <div className="card-plain" key={r.id}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem' }}>
+                    {r.username} {r.banned ? <span className="tag bad">suspendu</span> : <span className="tag ok">actif</span>}
+                  </h3>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    <button className="btn btn-ghost btn-sm" type="button" onClick={() => run(async () => {
+                      const nq = typeof window !== 'undefined' ? window.prompt('Nouveau quota (0 = illimité) :', r.key_quota) : null;
+                      if (nq === null) return;
+                      await api(`/api/admin/resellers/${r.id}`, { method: 'PATCH', body: { key_quota: Number(nq) || 0 } });
+                      setMsg('Quota mis à jour');
+                    })}>Quota</button>
+                    <button className="btn btn-ghost btn-sm" type="button" onClick={() => run(async () => {
+                      const np = typeof window !== 'undefined' ? window.prompt('Nouveau mot de passe :') : null;
+                      if (!np) return;
+                      await api(`/api/admin/resellers/${r.id}`, { method: 'PATCH', body: { password: np } });
+                      setMsg('Mot de passe changé');
+                    })}>Reset MDP</button>
+                    <button className="btn btn-ghost btn-sm" type="button" onClick={() => run(async () => {
+                      await api(`/api/admin/resellers/${r.id}/suspend`, { method: 'POST' });
+                      setMsg(r.banned ? 'Réactivé' : 'Suspendu');
+                    })}>{r.banned ? 'Réactiver' : 'Suspendre'}</button>
+                    <button className="btn btn-sm" type="button" style={{ background: 'rgba(225,6,0,0.15)', borderColor: 'rgba(225,6,0,0.5)', color: '#ff6b6b' }} onClick={() => run(async () => {
+                      if (typeof window !== 'undefined' && !window.confirm(`Supprimer le reseller ${r.username} ?`)) return;
+                      await api(`/api/admin/resellers/${r.id}`, { method: 'DELETE' });
+                      setMsg('Reseller supprimé');
+                    })}>Suppr.</button>
+                  </div>
+                </div>
+                <p className="muted" style={{ margin: '0.35rem 0 0.75rem' }}>
+                  Clés générées : {r.keys_used}{r.key_quota ? ` / ${r.key_quota}` : ' (quota illimité)'}
+                </p>
+                <div className="eyebrow" style={{ marginBottom: '0.5rem' }}>Produits assignés</div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {products.filter((p) => !p.is_free).map((p) => {
+                    const assigned = (r.product_ids || []).includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`chip ${assigned ? 'active' : ''}`}
+                        onClick={() => run(async () => {
+                          if (assigned) await api(`/api/admin/resellers/${r.id}/products/${p.id}`, { method: 'DELETE' });
+                          else await api(`/api/admin/resellers/${r.id}/products`, { method: 'POST', body: { product_id: p.id } });
+                          setMsg('Assignation mise à jour');
+                        })}
+                      >
+                        {assigned ? '✓ ' : ''}{p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {!resellers.length ? <p className="muted">Aucun reseller pour l'instant.</p> : null}
+          </>
+        ) : null}
+
+        {tab === 'files' ? (
+          <div className="card-plain">
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', marginBottom: '0.5rem' }}>
+              Fichiers hébergés — lien de téléchargement direct
+            </h3>
+            <p className="muted" style={{ marginBottom: '1rem' }}>
+              Uploade un fichier (persistant sur le volume) → tu obtiens un lien direct <code>/f/&lt;token&gt;</code> partageable, sans licence.
+            </p>
+            <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', marginBottom: '1rem', display: 'inline-block' }}>
+              + Uploader un fichier
+              <input
+                type="file"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  const name = typeof window !== 'undefined' ? window.prompt('Nom affiché (optionnel) :', f?.name || '') : '';
+                  uploadHostedFile(f, name || undefined);
+                }}
+              />
+            </label>
+            {hostedFiles.length ? (
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Nom</th><th>Fichier</th><th>Taille</th><th>Lien direct</th><th>DL</th><th></th></tr></thead>
+                  <tbody>
+                    {hostedFiles.map((f) => {
+                      const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/f/${f.token}`;
+                      return (
+                        <tr key={f.id}>
+                          <td>{f.name || '—'}</td>
+                          <td><code>{f.filename}</code></td>
+                          <td>{f.size ? `${(f.size / 1048576).toFixed(1)} Mo` : '—'}</td>
+                          <td>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              type="button"
+                              onClick={() => { try { navigator.clipboard.writeText(link); setMsg('Lien copié'); } catch { setMsg(link); } }}
+                            >
+                              Copier le lien
+                            </button>
+                            <a href={`/f/${f.token}`} target="_blank" rel="noreferrer" className="muted" style={{ marginLeft: '0.5rem', fontSize: '0.8rem' }}>ouvrir</a>
+                          </td>
+                          <td>{f.downloads}</td>
+                          <td>
+                            <button
+                              className="btn btn-sm"
+                              type="button"
+                              style={{ background: 'rgba(225,6,0,0.15)', borderColor: 'rgba(225,6,0,0.5)', color: '#ff6b6b' }}
+                              onClick={() => run(async () => {
+                                await api(`/api/files/${f.id}`, { method: 'DELETE' });
+                                setMsg('Fichier supprimé');
+                              })}
+                            >
+                              Suppr.
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : <p className="muted">Aucun fichier hébergé.</p>}
+          </div>
         ) : null}
 
         {tab === 'blacklist' ? (

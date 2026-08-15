@@ -6,6 +6,7 @@ export default function Nav() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const isStaff = user && (user.role === 'admin' || user.role === 'staff');
+  const isReseller = user && user.role === 'reseller';
 
   return (
     <>
@@ -28,6 +29,7 @@ export default function Nav() {
             <a href="/#faq">FAQ</a>
             <Link to="/downloads">Downloads</Link>
             {user ? <Link to="/dashboard">Dashboard</Link> : null}
+            {isReseller ? <Link to="/reseller">Reseller</Link> : null}
             {isStaff ? <Link to="/admin">Admin</Link> : null}
             {user ? (
               <button className="btn btn-ghost btn-sm" type="button" onClick={logout}>

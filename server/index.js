@@ -64,6 +64,12 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/keys', require('./routes/keys').router);
 app.use('/api/admin', require('./routes/admin').router);
+app.use('/api/reseller', require('./routes/reseller'));
+
+const hostedFiles = require('./routes/files');
+app.use('/api/files', hostedFiles.router);
+// Lien de téléchargement direct public : /f/<token>
+app.get('/f/:token', hostedFiles.directDownload);
 
 const webDist = path.join(__dirname, '..', 'web', 'dist');
 app.use(express.static(webDist));

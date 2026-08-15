@@ -193,6 +193,26 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS hosted_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    filename TEXT NOT NULL,
+    path TEXT NOT NULL,
+    size INTEGER,
+    token TEXT UNIQUE NOT NULL,
+    downloads INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS reseller_products (
+    user_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    PRIMARY KEY (user_id, product_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+  );
 `);
 
 // Migrations légères : ajoute les colonnes manquantes sur une base existante.
@@ -206,6 +226,7 @@ ensureColumn('users', 'discord_username', 'TEXT');
 ensureColumn('users', 'discord_global_name', 'TEXT');
 ensureColumn('users', 'discord_avatar', 'TEXT');
 ensureColumn('license_keys', 'ip', 'TEXT');
+ensureColumn('users', 'key_quota', 'INTEGER NOT NULL DEFAULT 0');
 
 function wrapDb(database) {
   return {

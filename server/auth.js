@@ -34,6 +34,15 @@ function adminRequired(req, res, next) {
   });
 }
 
+function resellerRequired(req, res, next) {
+  authRequired(req, res, () => {
+    if (!['admin', 'staff', 'reseller'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Accès reseller requis' });
+    }
+    next();
+  });
+}
+
 function isBlacklisted({ discordId, ip, hwid }) {
   const checks = [];
   if (discordId) checks.push(db.prepare("SELECT * FROM blacklist WHERE type = 'discord' AND value = ?").get(String(discordId)));
@@ -58,4 +67,4 @@ function isBanned({ discordId, username, ip }) {
   return null;
 }
 
-module.exports = { signToken, authRequired, adminRequired, isBlacklisted, isBanned };
+module.exports = { signToken, authRequired, adminRequired, resellerRequired, isBlacklisted, isBanned };
