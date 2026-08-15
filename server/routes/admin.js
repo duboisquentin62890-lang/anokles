@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { adminRequired } = require('../auth');
+const { sendKeyBackup, importKeys } = require('../backup');
 
 const router = express.Router();
 
@@ -30,6 +31,42 @@ router.get('/users', adminRequired, (_req, res) => {
   `).all();
   res.json({ users });
 });
+
+// Change le rôle d'un utilisateur (admin/staff/reseller/user).
+// Réservé aux comptes 'admin' (pas 'staff') pour éviter l'auto-escalade.
+const ROLES = ['admin', 'staff', 'reseller', 'user'];
+router.post('/users/:id/role', adminRequired, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Réservé aux admins' });
+  const role = String((req.body && req.body.role) || '').toLowerCase();
+  if (!ROLES.includes(role)) return res.status(400).json({ error: 'Rôle invalide' });
+  const target = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(req.params.id);
+  if (!target) return res.status(404).json({ error: 'Utilisateur introuvable' });
+  if (target.id === req.user.id && role !== 'admin') {
+    return res.status(400).json({ error: 'Tu ne peux pas retirer ton propre accès admin' });
+  }
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, target.id);
+  res.json({ ok: true, user: db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(target.id) });
+});
+
+/* ---- Backup / restauration des clés (webhook key.json) ---- */
+
+// Déclenche un envoi immédiat du backup vers le webhook Discord.
+router.post('/backup/run', adminRequired, async (_req, res) => {
+  const r = await sendKeyBackup('manual');
+  if (!r.ok) return res.status(502).json({ error: r.error || 'Envoi échoué' });
+  res.json({ ok: true, count: r.count });
+});
+
+// Ré-importe un key.json (body: le contenu du fichier, tableau ou { keys:[...] }).
+router.post('/keys/import', adminRequired, (req, res) => {
+  try {
+    const result = importKeys(req.body);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 
 router.get('/blacklist', adminRequired, (_req, res) => {
   res.json({ entries: db.prepare('SELECT * FROM blacklist ORDER BY id DESC').all() });

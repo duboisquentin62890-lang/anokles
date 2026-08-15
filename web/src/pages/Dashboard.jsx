@@ -5,11 +5,25 @@ import { useAuth } from '../lib/auth';
 
 const DISCORD_URL = 'https://discord.gg/';
 
+const IC = {
+  overview: 'M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z',
+  redeem: 'M15 7a4 4 0 11-3.4 6.1L9 16H7v2H5v2H2v-3l7.9-7.9A4 4 0 0115 7z',
+  loaders: 'M12 3v12m0 0l-4-4m4 4l4-4M4 21h16',
+  settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19 12l2-1-2-4-2 1a7 7 0 00-2-1V4h-4v2a7 7 0 00-2 1L5 6 3 10l2 1v2l-2 1 2 4 2-1a7 7 0 002 1v2h4v-2a7 7 0 002-1l2 1 2-4-2-1v-2z',
+  box: 'M3 7l9-4 9 4-9 4-9-4zm0 5l9 4 9-4M3 17l9 4 9-4',
+  shield: 'M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z',
+  link: 'M9 17H7A5 5 0 017 7h2m6 0h2a5 5 0 010 10h-2m-8-5h8',
+  bolt: 'M13 2L3 14h7l-1 8 10-12h-7l1-8z',
+};
+function Ic({ d }) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
+}
+
 const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'redeem', label: 'Redeem key' },
-  { id: 'loaders', label: 'Loaders' },
-  { id: 'settings', label: 'Paramètres' },
+  { id: 'overview', label: 'Overview', icon: 'overview' },
+  { id: 'redeem', label: 'Redeem key', icon: 'redeem' },
+  { id: 'loaders', label: 'Loaders', icon: 'loaders' },
+  { id: 'settings', label: 'Paramètres', icon: 'settings' },
 ];
 
 const LINK_MESSAGES = {
@@ -175,70 +189,114 @@ export default function Dashboard() {
   return (
     <div className="panel-shell">
       <aside className="panel-side">
-        {TABS.map((t) => (
-          <a
-            key={t.id}
-            href={`#${t.id}`}
-            className={tab === t.id ? 'active' : ''}
-            onClick={(e) => { e.preventDefault(); setTab(t.id); }}
-          >
-            {t.label}
-          </a>
-        ))}
-        <Link to="/">← Site</Link>
+        <div className="dash-userchip">
+          {user.discord_avatar ? (
+            <img src={user.discord_avatar} alt="" />
+          ) : (
+            <span className="dash-userchip-glyph">{(user.discord_global_name || user.username || '?').slice(0, 1).toUpperCase()}</span>
+          )}
+          <div>
+            <strong>{user.discord_global_name || user.discord_username || user.username}</strong>
+            <span className={`dash-role r-${user.role}`}>{user.role}</span>
+          </div>
+        </div>
+        <nav className="panel-nav">
+          {TABS.map((t) => (
+            <a
+              key={t.id}
+              href={`#${t.id}`}
+              className={tab === t.id ? 'active' : ''}
+              onClick={(e) => { e.preventDefault(); setTab(t.id); }}
+            >
+              <Ic d={IC[t.icon]} />{t.label}
+            </a>
+          ))}
+        </nav>
+        <Link to="/" className="dash-back">← Retour au site</Link>
       </aside>
 
       <main className="panel-main">
-        <div className="section-head">
-          <div className="eyebrow">Dashboard</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-            {user.discord_avatar ? (
-              <img
-                src={user.discord_avatar}
-                alt="Avatar Discord"
-                width={56}
-                height={56}
-                style={{ borderRadius: '50%', border: '2px solid rgba(225,6,0,0.6)' }}
-              />
-            ) : null}
-            <div>
-              <h2 style={{ margin: 0 }}>Salut, {user.discord_global_name || user.discord_username || user.username}</h2>
-              {user.discord_username ? (
-                <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>@{user.discord_username}</p>
-              ) : null}
-            </div>
-          </div>
-          <p>{TABS.find((t) => t.id === tab)?.label} · gère tes loaders et ton compte.</p>
-        </div>
-
         {err ? <div className="alert">{err}</div> : null}
-        {msg ? <div className="alert" style={{ borderColor: 'rgba(80,200,120,0.4)' }}>{msg}</div> : null}
+        {msg ? <div className="alert alert-ok">{msg}</div> : null}
 
         {tab === 'overview' ? (
           <>
-            <div className="stats">
-              <div className="stat"><strong>{activeCount}</strong><span>loaders actifs</span></div>
-              <div className="stat"><strong>{user.role}</strong><span>rôle</span></div>
-              <div className="stat"><strong>{linked ? 'Lié' : 'Non lié'}</strong><span>discord</span></div>
+            <div className="dash-hero">
+              <div className="dash-hero-glow" aria-hidden="true" />
+              <div className="dash-hero-top">
+                {user.discord_avatar ? (
+                  <img className="dash-hero-avatar" src={user.discord_avatar} alt="Avatar Discord" />
+                ) : (
+                  <span className="dash-hero-avatar dash-hero-avatar-fallback">{(user.discord_global_name || user.username || '?').slice(0, 1).toUpperCase()}</span>
+                )}
+                <div>
+                  <div className="eyebrow">Dashboard</div>
+                  <h2>Salut, <span className="grad">{user.discord_global_name || user.discord_username || user.username}</span></h2>
+                  {user.discord_username ? <p className="muted">@{user.discord_username}</p> : null}
+                </div>
+              </div>
+              <div className="dash-hero-actions">
+                <button className="btn btn-primary btn-round" type="button" onClick={() => setTab('redeem')}><Ic d={IC.redeem} /> Redeem une clé</button>
+                <button className="btn btn-ghost btn-round" type="button" onClick={() => setTab('loaders')}><Ic d={IC.loaders} /> Mes loaders</button>
+                <a className="btn btn-ghost btn-round" href={DISCORD_URL} target="_blank" rel="noreferrer"><Ic d={IC.link} /> Discord</a>
+              </div>
             </div>
-            <div className="hero-cta" style={{ marginTop: '1.25rem' }}>
-              <button className="btn btn-primary" type="button" onClick={() => setTab('redeem')}>Redeem une clé</button>
-              <button className="btn btn-ghost" type="button" onClick={() => setTab('loaders')}>Mes loaders</button>
-              <a className="btn btn-ghost" href={DISCORD_URL} target="_blank" rel="noreferrer">Ouvrir Discord</a>
+
+            <div className="dash-stats">
+              <div className="dash-stat">
+                <span className="dash-stat-ico"><Ic d={IC.box} /></span>
+                <div><strong>{activeCount}</strong><span>loaders actifs</span></div>
+              </div>
+              <div className="dash-stat">
+                <span className="dash-stat-ico"><Ic d={IC.bolt} /></span>
+                <div><strong>{unlockedCount}/{products.length}</strong><span>débloqués</span></div>
+              </div>
+              <div className="dash-stat">
+                <span className="dash-stat-ico"><Ic d={IC.shield} /></span>
+                <div><strong style={{ textTransform: 'capitalize' }}>{user.role}</strong><span>rôle</span></div>
+              </div>
+              <div className={`dash-stat ${linked ? 'ok' : 'warn'}`}>
+                <span className="dash-stat-ico"><Ic d={IC.link} /></span>
+                <div><strong>{linked ? 'Lié' : 'Non lié'}</strong><span>discord</span></div>
+              </div>
+            </div>
+
+            <div className="card-plain">
+              <div className="dash-section-head">
+                <h3><Ic d={IC.loaders} /> Aperçu de tes loaders</h3>
+                <button className="btn btn-ghost btn-sm btn-round" type="button" onClick={() => setTab('loaders')}>Tout voir →</button>
+              </div>
+              <div className="dash-mini-list">
+                {products.slice(0, 4).map((p) => {
+                  const lic = ownedBySlug[p.slug];
+                  const unlocked = lic && !isExpired(lic);
+                  return (
+                    <div className="dash-mini" key={p.id}>
+                      <span className="glyph">{(p.name || '?').slice(0, 2).toUpperCase()}</span>
+                      <div className="dash-mini-body">
+                        <strong>{p.name}</strong>
+                        <span className={`loader-state ${unlocked ? 'ok' : 'locked'}`}>{unlocked ? '● Actif' : '🔒 Verrouillé'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!products.length ? <p className="muted">Aucun loader pour le moment.</p> : null}
+              </div>
             </div>
           </>
         ) : null}
 
         {tab === 'redeem' ? (
-          <div className="card-plain">
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', marginBottom: '0.75rem' }}>Redeem key</h3>
-            <p className="muted" style={{ marginBottom: '1rem' }}>Entre la clé reçue à l'achat (ou via le bot Discord) pour débloquer ton loader.</p>
+          <div className="card-plain dash-redeem">
+            <span className="dash-redeem-ico"><Ic d={IC.redeem} /></span>
+            <h3>Redeem key</h3>
+            <p className="muted">Entre la clé reçue à l'achat (ou via le bot Discord) pour débloquer ton loader.</p>
             <form className="form" onSubmit={redeem}>
               <label>
                 License key
                 <input value={key} onChange={(e) => setKey(e.target.value)} placeholder="ANK-MONTH-XXXX-XXXX-XXXX-XXXX" required />
               </label>
-              <button className="btn btn-primary" type="submit">Redeem</button>
+              <button className="btn btn-primary btn-round" type="submit"><Ic d={IC.bolt} /> Redeem</button>
             </form>
           </div>
         ) : null}
@@ -257,8 +315,12 @@ export default function Dashboard() {
                 const left = daysLeft(lic);
                 return (
                   <article key={p.id} className={`loader-card ${unlocked ? 'on' : 'off'}`}>
-                    <div className="loader-top">
-                      <span className="glyph">{(p.name || '?').slice(0, 2).toUpperCase()}</span>
+                    <div className="loader-media">
+                      {p.image_url ? (
+                        <img src={p.image_url} alt={p.name} loading="lazy" />
+                      ) : (
+                        <span className="loader-media-glyph">{(p.name || '?').slice(0, 2).toUpperCase()}</span>
+                      )}
                       <span className={`loader-state ${unlocked ? 'ok' : 'locked'}`}>
                         {unlocked ? '● Actif' : expired ? '○ Expiré' : '🔒 Verrouillé'}
                       </span>

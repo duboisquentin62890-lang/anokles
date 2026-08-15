@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import ImageCropper from '../components/ImageCropper';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -66,6 +67,8 @@ export default function Admin() {
   const [priceForm, setPriceForm] = useState({ label: '', duration: 'month', price: 0 });
   const [q, setQ] = useState('');
   const [generated, setGenerated] = useState([]);
+  const [cropFile, setCropFile] = useState(null);
+  const [cropBusy, setCropBusy] = useState(false);
 
   const isStaff = user && (user.role === 'admin' || user.role === 'staff');
 
@@ -198,6 +201,17 @@ export default function Admin() {
     }
   }
 
+  async function confirmCrop(blob) {
+    if (!blob) return;
+    setCropBusy(true);
+    try {
+      await uploadImage(editId, new File([blob], 'crop.jpg', { type: 'image/jpeg' }));
+      setCropFile(null);
+    } finally {
+      setCropBusy(false);
+    }
+  }
+
   async function uploadHostedFile(file, name) {
     if (!file) return;
     setErr('');
@@ -295,6 +309,45 @@ export default function Admin() {
 
         {tab === 'keys' ? (
           <>
+            <div className="card-plain" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'center' }}>
+              <div style={{ marginRight: 'auto' }}>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', margin: 0 }}>Backup des clés</h3>
+                <p className="muted" style={{ margin: '0.15rem 0 0', fontSize: '0.85rem' }}>
+                  Sauvegarde auto vers Discord toutes les heures (key.json). Restaure ici un backup.
+                </p>
+              </div>
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                onClick={() => run(async () => {
+                  const r = await api('/api/admin/backup/run', { method: 'POST' });
+                  setMsg(`Backup envoyé sur Discord · ${r.count} clé(s)`);
+                })}
+              >
+                ⬆ Envoyer un backup
+              </button>
+              <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer', display: 'inline-block' }}>
+                ⬇ Importer key.json
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!f) return;
+                    run(async () => {
+                      const text = await f.text();
+                      let parsed;
+                      try { parsed = JSON.parse(text); } catch { throw new Error('Fichier JSON invalide'); }
+                      const r = await api('/api/admin/keys/import', { method: 'POST', body: parsed });
+                      setMsg(`Import : ${r.imported} ajoutée(s), ${r.skipped} ignorée(s), ${r.missingProduct} sans produit`);
+                    });
+                  }}
+                />
+              </label>
+            </div>
+
             <div className="card-plain">
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', marginBottom: '0.75rem' }}>
                 Clés par produit
@@ -609,7 +662,7 @@ export default function Admin() {
                           onChange={(e) => {
                             const f = e.target.files?.[0];
                             e.target.value = '';
-                            uploadImage(editId, f);
+                            if (f) setCropFile(f);
                           }}
                         />
                       </label>
@@ -1142,7 +1195,24 @@ export default function Admin() {
                   <tr key={u.id}>
                     <td>{u.id}</td>
                     <td>{u.username}</td>
-                    <td>{u.role}</td>
+                    <td>
+                      <select
+                        value={u.role}
+                        disabled={user.role !== 'admin'}
+                        onChange={(e) => {
+                          const role = e.target.value;
+                          run(async () => {
+                            await api(`/api/admin/users/${u.id}/role`, { method: 'POST', body: { role } });
+                            setMsg(`« ${u.username} » → ${role}`);
+                          });
+                        }}
+                      >
+                        <option value="user">user</option>
+                        <option value="reseller">reseller</option>
+                        <option value="staff">staff</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </td>
                     <td>{u.discord_id || '—'}</td>
                     <td><span className={`tag ${u.banned ? 'bad' : 'ok'}`}>{u.banned ? 'yes' : 'no'}</span></td>
                     <td>{u.created_at}</td>
@@ -1150,9 +1220,22 @@ export default function Admin() {
                 ))}
               </tbody>
             </table>
+            {user.role !== 'admin' ? (
+              <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
+                Seul un compte <b>admin</b> peut changer les rôles.
+              </p>
+            ) : null}
           </div>
         ) : null}
       </main>
+      {cropFile ? (
+        <ImageCropper
+          file={cropFile}
+          busy={cropBusy}
+          onCancel={() => setCropFile(null)}
+          onConfirm={confirmCrop}
+        />
+      ) : null}
     </div>
   );
 }

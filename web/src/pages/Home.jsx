@@ -100,43 +100,30 @@ export default function Home() {
 
   return (
     <div ref={root}>
-      <section className="hero">
-        <div className="container hero-grid">
-          <div className="hero-left">
-            <div className="hero-pill reveal"><span className="dot" /> Premium Gaming Solutions</div>
-            <div className="hero-welcome reveal">Welcome to</div>
-            <h1 className="hero-title reveal">ANOK<span>LES</span></h1>
-            <p className="hero-desc reveal">
-              Browse our top-quality HWID tools and gaming solutions.
-              Clés instantanées, checkout sécurisé, et vrai support sur Discord 24/7.
-            </p>
-            <div className="hero-chips reveal">
-              {HERO_CHIPS.map((c) => (
-                <span className="hero-chip" key={c.label}>
-                  <svg viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[c.icon]} /></svg>
-                  {c.label}
-                </span>
-              ))}
-            </div>
-            <div className="hero-cta reveal">
-              <a className="btn btn-primary btn-lg" href="#products">Shop Now →</a>
-              <a className="btn btn-ghost btn-lg" href="#reviews">★ See Reviews</a>
-            </div>
-            <div className="hero-promo reveal"><strong>ANOKLES</strong> 5% OFF</div>
+      <section className="hero hero-center">
+        <div className="container hero-center-inner">
+          <div className="hero-pill reveal"><span className="dot" /> Premium Gaming Solutions</div>
+          <div className="hero-welcome reveal">Start Winning With</div>
+          <h1 className="hero-wordmark reveal">
+            <img src="/logocompletanokles.png" alt="Anokles Services" />
+          </h1>
+          <p className="hero-desc reveal">
+            Browse our top-quality HWID tools and gaming solutions.
+            Clés instantanées, checkout sécurisé, et vrai support sur Discord 24/7.
+          </p>
+          <div className="hero-chips reveal">
+            {HERO_CHIPS.map((c) => (
+              <span className="hero-chip" key={c.label}>
+                <svg viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[c.icon]} /></svg>
+                {c.label}
+              </span>
+            ))}
           </div>
-
-          <div className="hero-right reveal">
-            <span className="live-badge"><span className="dot" /> Live stock ready</span>
-            <div className="emblem">
-              <span className="ring ring-1" />
-              <span className="ring ring-2" />
-              <span className="ring ring-3" />
-              <span className="orbit orbit-1"><i /></span>
-              <span className="orbit orbit-2"><i /></span>
-              <span className="orbit orbit-3"><i /></span>
-              <img src="/logo.png" alt="Anokles" className="emblem-logo" />
-            </div>
+          <div className="hero-cta reveal">
+            <a className="btn btn-primary btn-lg" href="#products">Shop Now →</a>
+            <a className="btn btn-ghost btn-lg" href="#reviews">★ See Reviews</a>
           </div>
+          <div className="hero-promo reveal"><strong>ANOKLES</strong> 5% OFF</div>
         </div>
 
         <div className="container hero-statcards reveal">
@@ -204,7 +191,7 @@ export default function Home() {
                   <p>{p.description}</p>
                   <div className="product-meta">
                     <div className="price">
-                      {p.is_free ? 'Free' : <>Purchase <span className="muted">(from ${Number(p.price).toFixed(2)})</span></>}
+                      {p.is_free ? 'Free' : <><span className="muted">Starting at</span>${Number(p.price).toFixed(2)}</>}
                     </div>
                     <Link className="btn btn-primary btn-sm btn-purchase" to={`/product/${p.slug}`}>
                       {p.is_free ? 'Download' : 'Purchase'}
@@ -225,21 +212,101 @@ export default function Home() {
       <section className="section" id="why">
         <div className="container">
           <div className="section-head center reveal">
-            <div className="eyebrow">Why trust us</div>
-            <h2>Built on <span className="grad">Proof, Not Promises</span></h2>
-            <p>Six raisons pour lesquelles des milliers de joueurs choisissent Anokles — bâti sur la transparence, pas le hype.</p>
+            <div className="eyebrow">Why Choose Us</div>
+            <h2>Why Choose <span className="grad">Anokles</span></h2>
+            <p>Bâti sur la transparence, pas le hype — voilà pourquoi des milliers de joueurs nous font confiance.</p>
           </div>
-          <div className="features">
-            {FEATURES.map((f, i) => (
-              <div className={`feature reveal ${i === 0 ? 'big' : ''}`} key={f.title}>
-                <div className="ico">
-                  <svg viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[f.icon]} /></svg>
-                </div>
-                <h3>{f.title}</h3>
-                <p>{f.desc}</p>
-                {f.rank ? <div className="rank">{f.rank}</div> : null}
+
+          <div className="bento">
+            {/* Instant delivery — ring */}
+            <div className="bento-card reveal">
+              <div className="ring-stat">
+                <svg viewBox="0 0 120 120">
+                  <circle className="track" cx="60" cy="60" r="52" />
+                  <circle className="fill" cx="60" cy="60" r="52" />
+                </svg>
+                <span>100%</span>
               </div>
-            ))}
+              <h3>Instant Delivery.</h3>
+              <p>Produits livrés directement après paiement — aucune attente.</p>
+            </div>
+
+            {/* No extra fees — mini rows */}
+            <div className="bento-card reveal">
+              <div className="mini-rows">
+                <div className="mini-row">
+                  <span className="mini-ico"><svg viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg></span>
+                  <div><strong>No hidden fees</strong><span>Le prix affiché est le prix payé</span></div>
+                </div>
+                <div className="mini-row">
+                  <span className="mini-ico"><svg viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS.shield} /></svg></span>
+                  <div><strong>Buyer protection</strong><span>Checkout sécurisé & vérifié</span></div>
+                </div>
+              </div>
+              <h3>No Extra Fees.</h3>
+              <p>Aucun frais additionnel sur nos produits.</p>
+            </div>
+
+            {/* Price matching */}
+            <div className="bento-card reveal">
+              <div className="price-match">
+                <div className="pm-box other">
+                  <span className="pm-label">Other Store</span>
+                  <strong>$24.99</strong>
+                  <span className="pm-tag bad">Lower found</span>
+                </div>
+                <span className="pm-arrow"><svg viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14m-6-6l6 6-6 6" /></svg></span>
+                <div className="pm-box ours">
+                  <span className="pm-label">Our Price</span>
+                  <strong>$22.99</strong>
+                  <span className="pm-tag good">Matched / Beaten</span>
+                </div>
+              </div>
+              <h3>Price Matching.</h3>
+              <p>Trouvé moins cher ? On s'aligne ou on fait mieux.</p>
+            </div>
+
+            {/* Moneyback — ring + checklist (wide) */}
+            <div className="bento-card wide reveal">
+              <div className="mb-inner">
+                <div className="ring-stat lg">
+                  <svg viewBox="0 0 120 120">
+                    <circle className="track" cx="60" cy="60" r="52" />
+                    <circle className="fill" cx="60" cy="60" r="52" />
+                  </svg>
+                  <span>100%<small>Guarantee</small></span>
+                </div>
+                <div className="checklist">
+                  <div className="check done">Order placed <b>✓</b></div>
+                  <div className="check done">Instant delivery <b>✓</b></div>
+                  <div className="check">Or Full Refund <b>↺</b></div>
+                </div>
+              </div>
+              <h3>100% Moneyback Guarantee.</h3>
+              <p>On livre, ou tu es remboursé.</p>
+            </div>
+
+            {/* Secure & reliable */}
+            <div className="bento-card reveal">
+              <div className="big-shield">
+                <svg viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS.shield} /></svg>
+              </div>
+              <h3>Secure & Reliable.</h3>
+              <p>Nos produits sont conçus avec la sécurité de l'utilisateur en tête.</p>
+            </div>
+
+            {/* 24/7 support — full width with faded wordmark */}
+            <div className="bento-card support reveal">
+              <div className="support-bg" aria-hidden="true">ANOKLES</div>
+              <div className="support-left">
+                <strong>24/7</strong>
+                <span>Support</span>
+              </div>
+              <a className="btn btn-primary btn-lg btn-round" href={DISCORD_URL} target="_blank" rel="noreferrer">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20 5a17 17 0 00-4-1l-.3.5A13 13 0 0119 6a15 15 0 00-14 0 13 13 0 013.3-1.5L8 4a17 17 0 00-4 1C1.6 8.6 1 12.2 1.2 15.8A17 17 0 006.4 18l.6-.9c-.9-.3-1.7-.7-2.5-1.2l.6-.4a12 12 0 0011.8 0l.6.4c-.8.5-1.6.9-2.5 1.2l.6.9a17 17 0 005.2-2.2c.3-4.2-.6-7.8-2.4-10.8zM8.5 13.5A1.6 1.6 0 017 11.8a1.6 1.6 0 011.5-1.7 1.6 1.6 0 011.5 1.7 1.6 1.6 0 01-1.5 1.7zm7 0a1.6 1.6 0 01-1.5-1.7 1.6 1.6 0 011.5-1.7 1.6 1.6 0 011.5 1.7 1.6 1.6 0 01-1.5 1.7z" /></svg>
+                Join Our Discord
+              </a>
+            </div>
           </div>
         </div>
       </section>

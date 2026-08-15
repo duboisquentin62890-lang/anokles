@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const { seed, uploadsDir } = require('./db');
 const { setDiscordBanHandler } = require('./routes/admin');
 const { startBot, banDiscordUser } = require('./bot');
+const { startKeyBackups } = require('./backup');
 
 seed();
 
@@ -88,3 +89,4 @@ app.listen(port, () => {
 });
 
 startBot().catch((e) => console.error('[bot] fail', e));
+startKeyBackups();
