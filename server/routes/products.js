@@ -396,7 +396,7 @@ router.post('/:slug/download', (req, res) => {
   if (!fs.existsSync(placeholder)) {
     fs.writeFileSync(
       placeholder,
-      `Anokles — ${product.name}\n\nPlace ton fichier de build ici (server/uploads/${product.slug}.zip)\net mets download_path dans le panel admin.\n`
+      `JinxWare — ${product.name}\n\nPlace ton fichier de build ici (server/uploads/${product.slug}.zip)\net mets download_path dans le panel admin.\n`
     );
   }
   res.download(placeholder, `${product.slug}-readme.txt`);

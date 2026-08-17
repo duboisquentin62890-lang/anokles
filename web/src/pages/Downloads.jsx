@@ -17,7 +17,7 @@ export default function Downloads() {
       <div className="section-head">
         <div className="eyebrow">Free</div>
         <h2>Free Downloads</h2>
-        <p>Outils gratuits Anokles — sans clé. Les produits payants restent derrière licence.</p>
+        <p>Outils gratuits JinxWare — sans clé. Les produits payants restent derrière licence.</p>
       </div>
       {err ? <div className="alert">{err}</div> : null}
       <div className="product-grid">

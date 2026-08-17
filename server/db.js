@@ -309,8 +309,8 @@ function seed() {
     );
     insert.run(
       'tkr-free-loader',
-      'Anokles Free Loader',
-      'Loader gratuit pour tester Anokles. Reset HWID limité.',
+      'JinxWare Free Loader',
+      'Loader gratuit pour tester JinxWare. Reset HWID limité.',
       'Free',
       0,
       1,

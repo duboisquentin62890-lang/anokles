@@ -1,4 +1,4 @@
-// Autoclaim Anokles — panel "Claim Customer Role" + rôles auto par produit payant.
+// Autoclaim JinxWare — panel "Claim Customer Role" + rôles auto par produit payant.
 // L'utilisateur clique le bouton, entre sa clé ANK-... dans un modal, et reçoit
 // le rôle Customer + le rôle de son produit. État persistant (settings) → survit au reboot.
 const {
@@ -13,7 +13,7 @@ const {
 } = require('discord.js');
 const { db } = require('../db');
 
-const RED = 0xe10600;
+const RED = 0x2b8bff;
 const GREEN = 0x2ecc71;
 const AUTOCLAIM_COMMANDS = ['autoclaim'];
 
@@ -44,7 +44,7 @@ function saveConfig(cfg) {
 /* ---------- helpers ---------- */
 async function ensureRole(guild, name, color) {
   let role = guild.roles.cache.find((r) => r.name === name);
-  if (!role) role = await guild.roles.create({ name, color, reason: 'Anokles autoclaim' });
+  if (!role) role = await guild.roles.create({ name, color, reason: 'JinxWare autoclaim' });
   return role;
 }
 function paidProducts() {
@@ -59,7 +59,7 @@ function panelEmbed() {
       "Clique le bouton ci-dessous et entre ta **clé de licence** `ANK-...`.\n\n" +
       'Tu recevras instantanément le rôle **Customer** et le rôle de ton produit.'
     )
-    .setFooter({ text: 'Anokles · vérification automatique' });
+    .setFooter({ text: 'JinxWare · vérification automatique' });
 }
 function panelRow() {
   return new ActionRowBuilder().addComponents(

@@ -37,7 +37,7 @@ const HERO_CHIPS = [
 ];
 
 const FEATURES = [
-  { icon: 'shield', title: 'Undetected', desc: 'Nos solutions gardent une longueur d\'avance sur les anti-cheat avec des updates quotidiennes.', rank: '#1 raison du choix Anokles' },
+  { icon: 'shield', title: 'Undetected', desc: 'Nos solutions gardent une longueur d\'avance sur les anti-cheat avec des updates quotidiennes.', rank: '#1 raison du choix JinxWare' },
   { icon: 'bolt', title: 'Instant Delivery', desc: 'Reçois ta clé de licence immédiatement après paiement, via le site ou le bot Discord.' },
   { icon: 'headset', title: '24/7 Support', desc: 'Notre équipe est dispo à toute heure pour t\'aider sur le Discord.' },
   { icon: 'gear', title: 'Easy Setup', desc: 'Installation simple avec des guides détaillés étape par étape.' },
@@ -105,7 +105,7 @@ export default function Home() {
           <div className="hero-pill reveal"><span className="dot" /> Premium Gaming Solutions</div>
           <div className="hero-welcome reveal">Start Winning With</div>
           <h1 className="hero-wordmark reveal">
-            <img src="/logocompletanokles.png" alt="Anokles Services" />
+            <img src="/logocompletanokles.png" alt="JinxWare Services" />
           </h1>
           <p className="hero-desc reveal">
             Browse our top-quality HWID tools and gaming solutions.
@@ -123,7 +123,7 @@ export default function Home() {
             <a className="btn btn-primary btn-lg" href="#products">Shop Now →</a>
             <a className="btn btn-ghost btn-lg" href="#reviews">★ See Reviews</a>
           </div>
-          <div className="hero-promo reveal"><strong>ANOKLES</strong> 5% OFF</div>
+          <div className="hero-promo reveal"><strong>JINXWARE</strong> 5% OFF</div>
         </div>
 
         <div className="container hero-statcards reveal">
@@ -132,6 +132,8 @@ export default function Home() {
           <div className="statcard"><strong>Secure</strong><span>Checkout</span></div>
           <div className="statcard"><strong>Live</strong><span>Stock ready</span></div>
         </div>
+
+        <img className="hero-mascot hero-mascot-r" src="/mascott.png" alt="" aria-hidden="true" />
       </section>
 
       {/* game marquee */}
@@ -175,10 +177,13 @@ export default function Home() {
           <div className="product-grid">
             {visible.map((p) => (
               <article key={p.id} className="product reveal">
-                <div
-                  className="product-media"
-                  style={p.image_url ? { backgroundImage: `url("${p.image_url}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
-                >
+                <div className="product-media">
+                  {p.image_url ? (
+                    <>
+                      <span className="media-bg" style={{ backgroundImage: `url("${p.image_url}")` }} />
+                      <img className="media-img" src={p.image_url} alt={p.name} loading="lazy" />
+                    </>
+                  ) : null}
                   {p.featured ? <span className="badge hot">Best Seller</span>
                     : <span className={`badge ${p.is_free ? 'free' : ''}`}>{p.is_free ? 'Free' : p.status}</span>}
                   <span className={`stock ${p.in_stock ? '' : 'out'}`}>
@@ -213,7 +218,7 @@ export default function Home() {
         <div className="container">
           <div className="section-head center reveal">
             <div className="eyebrow">Why Choose Us</div>
-            <h2>Why Choose <span className="grad">Anokles</span></h2>
+            <h2>Why Choose <span className="grad">JinxWare</span></h2>
             <p>Bâti sur la transparence, pas le hype — voilà pourquoi des milliers de joueurs nous font confiance.</p>
           </div>
 
@@ -297,7 +302,7 @@ export default function Home() {
 
             {/* 24/7 support — full width with faded wordmark */}
             <div className="bento-card support reveal">
-              <div className="support-bg" aria-hidden="true">ANOKLES</div>
+              <div className="support-bg" aria-hidden="true">JINXWARE</div>
               <div className="support-left">
                 <strong>24/7</strong>
                 <span>Support</span>
@@ -320,7 +325,7 @@ export default function Home() {
             <p>Nos produits en action.</p>
           </div>
           <a className="showcase-frame reveal" href={SHOWCASE_URL} target="_blank" rel="noreferrer">
-            <div className="showcase-tag"><img src="/logo.png" alt="Anokles" /> Showcase</div>
+            <div className="showcase-tag"><img src="/logo.png" alt="JinxWare" /> Showcase</div>
             <button className="play-btn" type="button" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg></button>
             <div className="showcase-title">Best HWID Spoofer for ANY game — Full Tutorial</div>
           </a>
@@ -334,7 +339,7 @@ export default function Home() {
             <div className="eyebrow">Reviews</div>
             <div className="num grad">4.93</div>
             <div className="stars-lg"><Stars n={5} /></div>
-            <p className="muted">1000+ reviews vérifiées de clients Anokles</p>
+            <p className="muted">1000+ reviews vérifiées de clients JinxWare</p>
             <a className="btn btn-ghost" href="#reviews" style={{ marginTop: '1rem' }}>View All Reviews</a>
           </div>
         </div>
@@ -343,7 +348,7 @@ export default function Home() {
             {[...REVIEWS, ...REVIEWS].map((r, i) => (
               <div className="review" key={i}>
                 <div className="head">
-                  <span className="brandline"><img src="/logo.png" alt="" /> Anokles</span>
+                  <span className="brandline"><img src="/logo.png" alt="" /> JinxWare</span>
                   <span className="verified">✓ Verified</span>
                 </div>
                 <Stars n={5} />
@@ -387,7 +392,7 @@ export default function Home() {
             <div>
               <div className="eyebrow">Community</div>
               <h2>Join Our Discord</h2>
-              <p>Support 24/7, stock live, vouches — même API que le bot Anokles.</p>
+              <p>Support 24/7, stock live, vouches — même API que le bot JinxWare.</p>
             </div>
             <a className="btn btn-primary btn-lg" href={DISCORD_URL} target="_blank" rel="noreferrer">Open Discord</a>
           </div>
@@ -423,11 +428,11 @@ export default function Home() {
             </div>
           </div>
           <div className="footer-bottom">
-            <div>© {new Date().getFullYear()} Anokles · Red · Black · Gray · White</div>
+            <div>© {new Date().getFullYear()} JinxWare · Blue · Black · Gray · White</div>
             <div className="muted">All systems operational</div>
           </div>
           <p className="disclaimer">
-            Anokles n'est affilié à aucun éditeur de jeu. Produits vendus à titre informatif ;
+            JinxWare n'est affilié à aucun éditeur de jeu. Produits vendus à titre informatif ;
             l'utilisation se fait sous la responsabilité de l'acheteur, conformément aux CGU.
           </p>
         </div>

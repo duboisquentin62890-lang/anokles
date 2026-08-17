@@ -30,8 +30,8 @@ export default function Nav() {
       <header className="nav">
         <div className="container nav-inner">
           <Link to="/" className="brand" onClick={() => setOpen(false)}>
-            <img src="/logo.png" alt="Anokles" className="brand-logo" />
-            Anok<span>les</span>
+            <img src="/logo.png" alt="JinxWare" className="brand-logo" />
+            Jinx<span>ware</span>
           </Link>
           <button className="mobile-nav-toggle" type="button" onClick={() => setOpen((v) => !v)}>
             Menu

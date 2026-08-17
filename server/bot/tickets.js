@@ -1,4 +1,4 @@
-// Système de tickets Anokles — panel + catégories + IA auto-responder + transcripts.
+// Système de tickets JinxWare — panel + catégories + IA auto-responder + transcripts.
 // Tout l'état est en base (table tickets/ticket_messages/ticket_blacklist) et les
 // boutons utilisent des customId stables → tout continue de marcher après un reboot.
 const {
@@ -11,7 +11,7 @@ const {
 } = require('discord.js');
 const { db } = require('../db');
 
-const RED = 0xe10600;
+const RED = 0x2b8bff;
 
 const TICKET_TYPES = [
   { key: 'buy', label: 'Buy', emoji: '🛒', desc: 'Acheter un produit ou une clé' },
@@ -76,13 +76,13 @@ function removeTicketBl(userId) {
 function panelEmbed() {
   return new EmbedBuilder()
     .setColor(RED)
-    .setTitle('🎟️ Anokles — Support')
+    .setTitle('🎟️ JinxWare — Support')
     .setDescription(
       "Ouvre un ticket en choisissant la catégorie qui correspond à ta demande.\n" +
       "Un membre du staff (ou l'IA) te répondra rapidement.\n\n" +
       TICKET_TYPES.map((t) => `${t.emoji} **${t.label}** — ${t.desc}`).join('\n')
     )
-    .setFooter({ text: 'Anokles · un seul ticket ouvert à la fois' });
+    .setFooter({ text: 'JinxWare · un seul ticket ouvert à la fois' });
 }
 
 function buildPanelRows() {
@@ -135,7 +135,7 @@ async function setup(guild, panelChannel) {
   // Rôle "Ticket BL" — empêche d'ouvrir des tickets
   let blRole = guild.roles.cache.find((r) => r.name === 'Ticket BL');
   if (!blRole) {
-    blRole = await guild.roles.create({ name: 'Ticket BL', color: 0x555555, reason: 'Anokles tickets' });
+    blRole = await guild.roles.create({ name: 'Ticket BL', color: 0x555555, reason: 'JinxWare tickets' });
   }
 
   // Une catégorie par type de ticket : 🛒 Buy · 🛠️ Support · 💻 HWID · 🤝 Resell · 🎥 Média
@@ -340,7 +340,7 @@ async function handleButton(interaction) {
 /* ---------- IA auto-responder ---------- */
 function systemPrompt() {
   return (
-    "Tu es l'assistant support d'Anokles, une boutique de loaders/logiciels de jeu. " +
+    "Tu es l'assistant support d'JinxWare, une boutique de loaders/logiciels de jeu. " +
     "Réponds en français, court (2-4 phrases), poli et pro. " +
     "Catégories de tickets: Buy (achat/clé), Support (bug technique), HWID (reset HWID), " +
     "Resell (revendeur), Média (créateur/partenariat). " +
@@ -411,7 +411,7 @@ async function onMessage(message) {
     await message.channel.sendTyping();
     const answer = await aiReply(message.content || '', ticket.category);
     await message.reply({
-      embeds: [new EmbedBuilder().setColor(RED).setAuthor({ name: 'Anokles · Assistant IA' }).setDescription(answer)],
+      embeds: [new EmbedBuilder().setColor(RED).setAuthor({ name: 'JinxWare · Assistant IA' }).setDescription(answer)],
     });
   } catch (e) { console.warn('[tickets] ai fail', e.message); }
   return true;

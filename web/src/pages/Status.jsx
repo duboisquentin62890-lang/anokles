@@ -35,7 +35,7 @@ export default function Status() {
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(2.4rem,6vw,3.6rem)', letterSpacing: '0.04em' }}>
           System Status
         </h1>
-        <p className="muted">État en temps réel de tous les produits &amp; services Anokles</p>
+        <p className="muted">État en temps réel de tous les produits &amp; services JinxWare</p>
       </div>
 
       {err ? <div className="alert">{err}</div> : null}

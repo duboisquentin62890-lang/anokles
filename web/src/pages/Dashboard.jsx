@@ -158,7 +158,7 @@ export default function Dashboard() {
           </h2>
           <p className="muted" style={{ marginBottom: '1.25rem' }}>
             Pour accéder à ton dashboard, tu dois d'abord lier ton compte Discord.
-            Ça synchronise tes accès, ton support et tes loaders avec le bot Anokles.
+            Ça synchronise tes accès, ton support et tes loaders avec le bot JinxWare.
           </p>
           {err ? <div className="alert" style={{ marginBottom: '1rem' }}>{err}</div> : null}
           {discordOauth ? (
@@ -317,7 +317,10 @@ export default function Dashboard() {
                   <article key={p.id} className={`loader-card ${unlocked ? 'on' : 'off'}`}>
                     <div className="loader-media">
                       {p.image_url ? (
-                        <img src={p.image_url} alt={p.name} loading="lazy" />
+                        <>
+                          <span className="media-bg" style={{ backgroundImage: `url("${p.image_url}")` }} />
+                          <img src={p.image_url} alt={p.name} loading="lazy" />
+                        </>
                       ) : (
                         <span className="loader-media-glyph">{(p.name || '?').slice(0, 2).toUpperCase()}</span>
                       )}
@@ -366,7 +369,7 @@ export default function Dashboard() {
           <div className="card-plain">
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', marginBottom: '0.75rem' }}>Paramètres · Discord</h3>
             <p className="muted" style={{ marginBottom: '1rem' }}>
-              Lie ton compte Discord : synchronise tes accès, bans et le support avec le bot Anokles.
+              Lie ton compte Discord : synchronise tes accès, bans et le support avec le bot JinxWare.
             </p>
             {discordOauth ? (
               <div className="hero-cta" style={{ marginBottom: '1.25rem' }}>

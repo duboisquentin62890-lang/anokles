@@ -39,8 +39,8 @@ function ownerOrAdmin(member) {
 
 function helpEmbed() {
   return new EmbedBuilder()
-    .setColor(0xe10600)
-    .setTitle('Anokles — Commandes')
+    .setColor(0x2b8bff)
+    .setTitle('JinxWare — Commandes')
     .setDescription('Préfixe `+` ou slash `/` · Staff uniquement sauf mention')
     .addFields(
       { name: '+help / /help', value: 'Affiche cette aide' },
@@ -60,7 +60,7 @@ function helpEmbed() {
       { name: '🎟️ Tickets', value: '`+ticketsetup` (setup auto) · `+ticketpanel` · `+claim` · `+close [raison]` · `+add @user` · `+remove @user` · `+ticketbl @user` · `+unticketbl @user`' },
       { name: '🎫 Autoclaim', value: '`+autoclaim` — crée les rôles Customer (+ un par produit payant) et poste le panneau : le client entre sa clé pour recevoir son rôle.' }
     )
-    .setFooter({ text: 'Anokles API · rouge / noir' });
+    .setFooter({ text: 'JinxWare API · bleu / noir' });
 }
 
 function findProduct(ref) {
@@ -94,7 +94,7 @@ async function handleGenKey(ctx, args) {
   tx();
 
   const embed = new EmbedBuilder()
-    .setColor(0xe10600)
+    .setColor(0x2b8bff)
     .setTitle('Clés générées')
     .setDescription(keys.map((k) => `\`${k}\``).join('\n'))
     .addFields(
@@ -147,7 +147,7 @@ async function handleBan(ctx, args, guild) {
   const raw = args[0];
   if (!raw) return ctx.reply('Usage: `+ban <@user|id> [raison]`');
   const discordId = raw.replace(/[<@!>]/g, '');
-  const reason = args.slice(1).join(' ') || 'Banned from Anokles';
+  const reason = args.slice(1).join(' ') || 'Banned from JinxWare';
 
   db.prepare(`
     INSERT INTO bans (discord_id, reason, banned_by, site_ban, discord_ban, active)
@@ -158,7 +158,7 @@ async function handleBan(ctx, args, guild) {
   let discordOk = false;
   try {
     if (guild) {
-      await guild.members.ban(discordId, { reason: `Anokles: ${reason}` });
+      await guild.members.ban(discordId, { reason: `JinxWare: ${reason}` });
       discordOk = true;
     }
   } catch (e) {
@@ -173,7 +173,7 @@ async function handleUnban(ctx, args, guild) {
   db.prepare('UPDATE bans SET active = 0 WHERE discord_id = ?').run(discordId);
   db.prepare('UPDATE users SET banned = 0, ban_reason = NULL WHERE discord_id = ?').run(discordId);
   try {
-    if (guild) await guild.members.unban(discordId, 'Anokles unban');
+    if (guild) await guild.members.unban(discordId, 'JinxWare unban');
   } catch { /* ignore */ }
   return ctx.reply(`✅ Unban \`${discordId}\``);
 }
@@ -192,7 +192,7 @@ async function handleCheck(ctx, args) {
   const lines = rows.map((r) =>
     `\`${r.key_code}\` · **${r.product_name}** · ${r.status} · HWID: \`${r.hwid || '—'}\` · exp: ${r.expires_at || '—'}`
   );
-  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0xe10600).setTitle('Lookup').setDescription(lines.join('\n'))] });
+  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0x2b8bff).setTitle('Lookup').setDescription(lines.join('\n'))] });
 }
 
 async function handleStock(ctx) {
@@ -206,7 +206,7 @@ async function handleStock(ctx) {
     ORDER BY p.id
   `).all();
   const desc = rows.map((r) => `**${r.name}** (\`${r.slug}\`) · unused: **${r.unused || 0}** · active: **${r.active || 0}**`).join('\n') || 'Aucun produit';
-  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0xe10600).setTitle('Stock clés').setDescription(desc)] });
+  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0x2b8bff).setTitle('Stock clés').setDescription(desc)] });
 }
 
 async function handleLookup(ctx, args) {
@@ -216,7 +216,7 @@ async function handleLookup(ctx, args) {
   const bl = db.prepare('SELECT * FROM blacklist WHERE value = ?').all(q);
   const ban = db.prepare('SELECT * FROM bans WHERE discord_id = ? OR username = ? ORDER BY id DESC LIMIT 3').all(q, q);
   const embed = new EmbedBuilder()
-    .setColor(0xe10600)
+    .setColor(0x2b8bff)
     .setTitle('Lookup')
     .addFields(
       { name: 'User', value: user ? `\`${user.username}\` · role ${user.role} · banned=${user.banned}` : '—' },
@@ -245,7 +245,7 @@ async function handleWlList(ctx) {
   if (!ownerOrAdmin(ctx.member)) return ctx.reply('❌ Réservé owner/admin.');
   const rows = db.prepare('SELECT discord_id, added_by, created_at FROM bot_whitelist ORDER BY created_at DESC').all();
   const desc = rows.length ? rows.map((r) => `<@${r.discord_id}> · par ${r.added_by || '—'}`).join('\n') : 'Vide';
-  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0xe10600).setTitle('Whitelist bot').setDescription(desc)] });
+  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0x2b8bff).setTitle('Whitelist bot').setDescription(desc)] });
 }
 
 /* ---------- Clés par code (delkey / blkey / unblkey) ---------- */
@@ -286,14 +286,14 @@ async function handleProducts(ctx) {
     const from = pf && pf.m != null ? pf.m : p.price;
     return `**${p.name}** \`${p.slug}\` (#${p.id}) · ${p.is_free ? 'Gratuit' : `dès ${from}€`}`;
   }).join('\n') || 'Aucun produit';
-  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0xe10600).setTitle('Produits').setDescription(desc)] });
+  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0x2b8bff).setTitle('Produits').setDescription(desc)] });
 }
 async function handlePrices(ctx, args) {
   const product = findProduct(args[0]);
   if (!product) return ctx.reply('Usage: `+prices <slug|id>`');
   const rows = db.prepare('SELECT id, label, duration, price FROM product_prices WHERE product_id = ? ORDER BY sort, price').all(product.id);
   const desc = rows.length ? rows.map((r) => `#${r.id} · **${r.label}** (${r.duration}) → ${r.price}€`).join('\n') : 'Aucun palier (prix unique).';
-  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0xe10600).setTitle(`Prix · ${product.name}`).setDescription(desc)] });
+  return ctx.reply({ embeds: [new EmbedBuilder().setColor(0x2b8bff).setTitle(`Prix · ${product.name}`).setDescription(desc)] });
 }
 async function handleAddPrice(ctx, args) {
   const [ref, label, duration, price] = args;
@@ -397,7 +397,7 @@ async function dispatch(ctx, cmd, args) {
 
 function buildSlashCommands() {
   return [
-    new SlashCommandBuilder().setName('help').setDescription('Aide Anokles'),
+    new SlashCommandBuilder().setName('help').setDescription('Aide JinxWare'),
     new SlashCommandBuilder()
       .setName('genkey')
       .setDescription('Générer des clés')
@@ -483,7 +483,7 @@ async function startBot() {
 
   client.once('ready', () => {
     console.log(`[bot] Connecté: ${client.user.tag}`);
-    client.user.setActivity('Anokles · +help', { type: 3 });
+    client.user.setActivity('JinxWare · +help', { type: 3 });
   });
 
   client.on('messageCreate', async (message) => {

@@ -31,7 +31,7 @@ export default function Register() {
     <div className="auth-page container">
       <div className="auth-box">
         <h1>REGISTER</h1>
-        <p className="sub">Crée un compte pour redeem tes clés Anokles.</p>
+        <p className="sub">Crée un compte pour redeem tes clés JinxWare.</p>
         {error ? <div className="alert">{error}</div> : null}
         <form className="form" onSubmit={onSubmit}>
           <label>

@@ -58,7 +58,7 @@ app.use('/api/keys/verify', sensitiveLimiter);
 app.use('/api/keys/redeem', sensitiveLimiter);
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, brand: 'Anokles', time: new Date().toISOString() });
+  res.json({ ok: true, brand: 'JinxWare', time: new Date().toISOString() });
 });
 
 app.use('/api/auth', require('./routes/auth'));

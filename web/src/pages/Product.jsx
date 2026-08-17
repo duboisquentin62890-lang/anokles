@@ -88,12 +88,16 @@ export default function Product() {
           <div
             className="product-media"
             style={{
-              height: 240,
               borderRadius: 'var(--radius)',
               border: '1px solid var(--line)',
-              ...(mainImage ? { backgroundImage: `url("${mainImage}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
             }}
           >
+            {mainImage ? (
+              <>
+                <span className="media-bg" style={{ backgroundImage: `url("${mainImage}")` }} />
+                <img className="media-img" src={mainImage} alt={product.name} />
+              </>
+            ) : null}
             {product.featured ? <span className="badge hot">Best Seller</span>
               : <span className={`badge ${product.is_free ? 'free' : ''}`}>{product.is_free ? 'Free' : product.status}</span>}
             <span className={`stock ${product.in_stock ? '' : 'out'}`}>
@@ -115,7 +119,7 @@ export default function Product() {
                     borderRadius: '8px',
                     overflow: 'hidden',
                     cursor: 'pointer',
-                    border: `2px solid ${i === activeImg ? 'var(--red, #e10600)' : 'var(--line)'}`,
+                    border: `2px solid ${i === activeImg ? 'var(--red, #2b8bff)' : 'var(--line)'}`,
                     background: 'transparent',
                   }}
                 >
@@ -162,8 +166,8 @@ export default function Product() {
                         width: '100%',
                         padding: '0.9rem 1rem',
                         borderRadius: 'var(--radius)',
-                        border: `1px solid ${active ? 'var(--red, #e10600)' : 'var(--line)'}`,
-                        background: active ? 'rgba(225,6,0,0.06)' : 'transparent',
+                        border: `1px solid ${active ? 'var(--red, #2b8bff)' : 'var(--line)'}`,
+                        background: active ? 'rgba(43,139,255,0.08)' : 'transparent',
                         color: 'inherit',
                         cursor: 'pointer',
                         textAlign: 'left',

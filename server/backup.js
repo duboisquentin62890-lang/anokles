@@ -28,7 +28,7 @@ async function sendKeyBackup(reason = 'auto') {
 
   const form = new FormData();
   form.append('payload_json', JSON.stringify({
-    content: `🔐 Backup clés Anokles — **${keys.length}** clé(s) · ${reason} · ${new Date().toLocaleString('fr-FR')}`,
+    content: `🔐 Backup clés JinxWare — **${keys.length}** clé(s) · ${reason} · ${new Date().toLocaleString('fr-FR')}`,
   }));
   form.append('files[0]', new Blob([json], { type: 'application/json' }), 'key.json');
 
