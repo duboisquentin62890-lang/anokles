@@ -27,8 +27,29 @@ function authRequired(req, res, next) {
 
 function adminRequired(req, res, next) {
   authRequired(req, res, () => {
-    if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+    if (!['owner', 'admin', 'staff'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Accès staff requis' });
+    }
+    next();
+  });
+}
+
+// "Owner" = compte tout-puissant. Un compte est owner si son rôle est 'owner',
+// OU si son username figure dans OWNER_USERNAMES (fallback : le compte admin
+// de bootstrap ADMIN_USER, défaut 'admin') — comme ça on ne se verrouille jamais dehors.
+function ownerUsernames() {
+  const raw = process.env.OWNER_USERNAMES || process.env.ADMIN_USER || 'admin';
+  return raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+function isOwner(user) {
+  if (!user) return false;
+  if (user.role === 'owner') return true;
+  return ownerUsernames().includes(String(user.username || '').toLowerCase());
+}
+function ownerRequired(req, res, next) {
+  authRequired(req, res, () => {
+    if (!isOwner(req.user)) {
+      return res.status(403).json({ error: 'Réservé aux owners' });
     }
     next();
   });
@@ -36,7 +57,7 @@ function adminRequired(req, res, next) {
 
 function resellerRequired(req, res, next) {
   authRequired(req, res, () => {
-    if (!['admin', 'staff', 'reseller'].includes(req.user.role)) {
+    if (!['owner', 'admin', 'staff', 'reseller'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Accès reseller requis' });
     }
     next();
@@ -67,4 +88,4 @@ function isBanned({ discordId, username, ip }) {
   return null;
 }
 
-module.exports = { signToken, authRequired, adminRequired, resellerRequired, isBlacklisted, isBanned };
+module.exports = { signToken, authRequired, adminRequired, ownerRequired, resellerRequired, isOwner, isBlacklisted, isBanned };

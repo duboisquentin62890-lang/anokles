@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { db, uploadsDir, generateKeyCode } = require('../db');
-const { authRequired, adminRequired, isBlacklisted, isBanned } = require('../auth');
+const { authRequired, adminRequired, ownerRequired, isBlacklisted, isBanned } = require('../auth');
 const { resolveDuration, resolveDays, codeForDuration } = require('./keys');
 
 const router = express.Router();
@@ -110,7 +110,7 @@ router.get('/:slug', (req, res) => {
   res.json({ product: attachExtras(product) });
 });
 
-router.post('/', adminRequired, (req, res) => {
+router.post('/', ownerRequired, (req, res) => {
   const { slug, name, description, category, price, is_free, featured, status, image_url } = req.body || {};
   if (!slug || !name) return res.status(400).json({ error: 'slug et name requis' });
   try {
@@ -135,7 +135,7 @@ router.post('/', adminRequired, (req, res) => {
   }
 });
 
-router.patch('/:id', adminRequired, (req, res) => {
+router.patch('/:id', ownerRequired, (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Introuvable' });
   const fields = ['name', 'description', 'category', 'price', 'is_free', 'in_stock', 'featured', 'status', 'image_url', 'download_path', 'slug'];
@@ -155,7 +155,7 @@ router.patch('/:id', adminRequired, (req, res) => {
   res.json({ product: db.prepare('SELECT * FROM products WHERE id = ?').get(product.id) });
 });
 
-router.delete('/:id', adminRequired, (req, res) => {
+router.delete('/:id', ownerRequired, (req, res) => {
   db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -228,7 +228,7 @@ router.get('/:id/prices', (req, res) => {
   res.json({ prices: rows });
 });
 
-router.post('/:id/prices', adminRequired, (req, res) => {
+router.post('/:id/prices', ownerRequired, (req, res) => {
   const product = db.prepare('SELECT id FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Produit introuvable' });
   const { label, duration, price, sort } = req.body || {};
@@ -239,7 +239,7 @@ router.post('/:id/prices', adminRequired, (req, res) => {
   res.json({ price: db.prepare('SELECT * FROM product_prices WHERE id = ?').get(info.lastInsertRowid) });
 });
 
-router.patch('/prices/:priceId', adminRequired, (req, res) => {
+router.patch('/prices/:priceId', ownerRequired, (req, res) => {
   const row = db.prepare('SELECT * FROM product_prices WHERE id = ?').get(req.params.priceId);
   if (!row) return res.status(404).json({ error: 'Palier introuvable' });
   const fields = ['label', 'duration', 'price', 'sort'];
@@ -257,7 +257,7 @@ router.patch('/prices/:priceId', adminRequired, (req, res) => {
   res.json({ price: db.prepare('SELECT * FROM product_prices WHERE id = ?').get(row.id) });
 });
 
-router.delete('/prices/:priceId', adminRequired, (req, res) => {
+router.delete('/prices/:priceId', ownerRequired, (req, res) => {
   db.prepare('DELETE FROM product_prices WHERE id = ?').run(req.params.priceId);
   res.json({ ok: true });
 });
@@ -271,7 +271,7 @@ router.get('/:id/files', (req, res) => {
   res.json({ files: rows });
 });
 
-router.post('/:id/files', adminRequired, upload.single('file'), (req, res) => {
+router.post('/:id/files', ownerRequired, upload.single('file'), (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Produit introuvable' });
   if (!req.file) return res.status(400).json({ error: 'Fichier requis (champ « file »)' });
@@ -288,7 +288,7 @@ router.post('/:id/files', adminRequired, upload.single('file'), (req, res) => {
   res.json({ file: db.prepare('SELECT id, label, filename, size, created_at FROM product_files WHERE id = ?').get(info.lastInsertRowid) });
 });
 
-router.delete('/files/:fileId', adminRequired, (req, res) => {
+router.delete('/files/:fileId', ownerRequired, (req, res) => {
   const row = db.prepare('SELECT * FROM product_files WHERE id = ?').get(req.params.fileId);
   if (!row) return res.status(404).json({ error: 'Fichier introuvable' });
   if (row.path && row.path.startsWith(uploadsDir) && fs.existsSync(row.path)) {
@@ -325,7 +325,7 @@ router.get('/:id/images', (req, res) => {
 });
 
 // Ajoute une image par URL (body.url) OU par upload (champ « file »)
-router.post('/:id/images', adminRequired, imgUpload.single('file'), (req, res) => {
+router.post('/:id/images', ownerRequired, imgUpload.single('file'), (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Produit introuvable' });
   let url = (req.body && req.body.url && String(req.body.url).trim()) || null;
@@ -340,7 +340,7 @@ router.post('/:id/images', adminRequired, imgUpload.single('file'), (req, res) =
   res.json({ image: db.prepare('SELECT id, url, sort FROM product_images WHERE id = ?').get(info.lastInsertRowid) });
 });
 
-router.delete('/images/:imageId', adminRequired, (req, res) => {
+router.delete('/images/:imageId', ownerRequired, (req, res) => {
   const row = db.prepare('SELECT * FROM product_images WHERE id = ?').get(req.params.imageId);
   if (!row) return res.status(404).json({ error: 'Image introuvable' });
   // Supprime le fichier disque si c'était un upload local
@@ -358,7 +358,7 @@ router.delete('/images/:imageId', adminRequired, (req, res) => {
   res.json({ ok: true });
 });
 
-router.post('/:id/upload', adminRequired, upload.single('file'), (req, res) => {
+router.post('/:id/upload', ownerRequired, upload.single('file'), (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Produit introuvable' });
   if (!req.file) return res.status(400).json({ error: 'Fichier requis (champ « file »)' });

@@ -7,9 +7,9 @@ import ImageCropper from '../components/ImageCropper';
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'keys', label: 'Keys' },
-  { id: 'products', label: 'Products' },
-  { id: 'resellers', label: 'Resellers' },
-  { id: 'files', label: 'Files' },
+  { id: 'products', label: 'Products', owner: true },
+  { id: 'resellers', label: 'Resellers', owner: true },
+  { id: 'files', label: 'Files', owner: true },
   { id: 'blacklist', label: 'Blacklist' },
   { id: 'bans', label: 'Bans' },
   { id: 'users', label: 'Users' },
@@ -70,18 +70,23 @@ export default function Admin() {
   const [cropFile, setCropFile] = useState(null);
   const [cropBusy, setCropBusy] = useState(false);
 
-  const isStaff = user && (user.role === 'admin' || user.role === 'staff');
+  const isStaff = user && (user.role === 'owner' || user.role === 'admin' || user.role === 'staff');
+  const isOwner = Boolean(user && (user.is_owner || user.role === 'owner'));
+  const visibleTabs = TABS.filter((t) => !t.owner || isOwner);
+
+  // Un non-owner qui atterrit sur un onglet réservé (hash #products…) est renvoyé à l'overview.
+  useEffect(() => {
+    if (!TABS.some((t) => t.id === tab && (!t.owner || isOwner))) setTab('overview');
+  }, [tab, isOwner]);
 
   async function loadAll() {
-    const [s, p, k, bl, b, u, rs, hf] = await Promise.all([
+    const [s, p, k, bl, b, u] = await Promise.all([
       api('/api/admin/stats'),
       api('/api/products'),
       api(`/api/keys${q ? `?q=${encodeURIComponent(q)}` : ''}`),
       api('/api/admin/blacklist'),
       api('/api/admin/bans'),
       api('/api/admin/users'),
-      api('/api/admin/resellers'),
-      api('/api/files'),
     ]);
     setStats(s.stats);
     setProducts(p.products || []);
@@ -89,14 +94,21 @@ export default function Admin() {
     setBlacklist(bl.entries || []);
     setBans(b.bans || []);
     setUsers(u.users || []);
-    setResellers(rs.resellers || []);
-    setHostedFiles(hf.files || []);
+    // Réservé aux owners — on ne charge pas ces endpoints pour staff/admin (sinon 403).
+    if (isOwner) {
+      const [rs, hf] = await Promise.all([
+        api('/api/admin/resellers'),
+        api('/api/files'),
+      ]);
+      setResellers(rs.resellers || []);
+      setHostedFiles(hf.files || []);
+    }
   }
 
   useEffect(() => {
     if (!isStaff) return;
     loadAll().catch((e) => setErr(e.message));
-  }, [isStaff]);
+  }, [isStaff, isOwner]);
 
   async function loadProductKeys(slug) {
     setKeyProduct(slug);
@@ -270,7 +282,7 @@ export default function Admin() {
   return (
     <div className="panel-shell">
       <aside className="panel-side">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <a
             key={t.id}
             href={`#${t.id}`}
@@ -1198,7 +1210,7 @@ export default function Admin() {
                     <td>
                       <select
                         value={u.role}
-                        disabled={user.role !== 'admin'}
+                        disabled={!isOwner}
                         onChange={(e) => {
                           const role = e.target.value;
                           run(async () => {
@@ -1211,6 +1223,7 @@ export default function Admin() {
                         <option value="reseller">reseller</option>
                         <option value="staff">staff</option>
                         <option value="admin">admin</option>
+                        <option value="owner">owner</option>
                       </select>
                     </td>
                     <td>{u.discord_id || '—'}</td>
@@ -1220,9 +1233,9 @@ export default function Admin() {
                 ))}
               </tbody>
             </table>
-            {user.role !== 'admin' ? (
+            {!isOwner ? (
               <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
-                Seul un compte <b>admin</b> peut changer les rôles.
+                Seul un compte <b>owner</b> peut changer les rôles.
               </p>
             ) : null}
           </div>

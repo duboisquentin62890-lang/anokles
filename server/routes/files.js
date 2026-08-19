@@ -4,7 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
 const { db, uploadsDir } = require('../db');
-const { adminRequired } = require('../auth');
+const { ownerRequired } = require('../auth');
 
 const router = express.Router();
 
@@ -27,7 +27,7 @@ function makeToken() {
 }
 
 // Liste (admin)
-router.get('/', adminRequired, (_req, res) => {
+router.get('/', ownerRequired, (_req, res) => {
   const files = db.prepare(
     'SELECT id, name, filename, size, token, downloads, created_by, created_at FROM hosted_files ORDER BY id DESC LIMIT 500'
   ).all();
@@ -35,7 +35,7 @@ router.get('/', adminRequired, (_req, res) => {
 });
 
 // Upload → lien direct /f/<token>
-router.post('/', adminRequired, upload.single('file'), (req, res) => {
+router.post('/', ownerRequired, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Fichier requis (champ « file »)' });
   const token = makeToken();
   const info = db.prepare(
@@ -52,7 +52,7 @@ router.post('/', adminRequired, upload.single('file'), (req, res) => {
   res.json({ file, link: `/f/${token}` });
 });
 
-router.delete('/:id', adminRequired, (req, res) => {
+router.delete('/:id', ownerRequired, (req, res) => {
   const row = db.prepare('SELECT * FROM hosted_files WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Fichier introuvable' });
   if (row.path && row.path.startsWith(uploadsDir) && fs.existsSync(row.path)) {

@@ -2,7 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
-const { signToken, authRequired, isBlacklisted, isBanned } = require('../auth');
+const { signToken, authRequired, isOwner, isBlacklisted, isBanned } = require('../auth');
 
 const router = express.Router();
 
@@ -54,7 +54,7 @@ router.post('/login', (req, res) => {
   const bl = isBlacklisted({ discordId: user.discord_id, ip });
   if (ban || bl) return res.status(403).json({ error: 'Accès refusé (ban/blacklist)' });
 
-  const safe = { id: user.id, username: user.username, role: user.role, discord_id: user.discord_id, email: user.email };
+  const safe = { id: user.id, username: user.username, role: user.role, discord_id: user.discord_id, email: user.email, is_owner: isOwner(user) };
   res.json({ token: signToken(user), user: safe });
 });
 
@@ -70,14 +70,16 @@ router.get('/me', authRequired, (req, res) => {
     'SELECT id, username, role, discord_id, discord_username, discord_global_name, discord_avatar, email FROM users WHERE id = ?'
   ).get(req.user.id);
 
+  const baseUser = row || {
+    id: req.user.id,
+    username: req.user.username,
+    role: req.user.role,
+    discord_id: req.user.discord_id,
+    email: req.user.email,
+  };
+
   res.json({
-    user: row || {
-      id: req.user.id,
-      username: req.user.username,
-      role: req.user.role,
-      discord_id: req.user.discord_id,
-      email: req.user.email,
-    },
+    user: { ...baseUser, is_owner: isOwner(baseUser) },
     discord_oauth: discordConfigured(),
     keys,
   });

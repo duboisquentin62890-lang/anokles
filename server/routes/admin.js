@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
-const { adminRequired } = require('../auth');
+const { adminRequired, ownerRequired, isOwner } = require('../auth');
 const { sendKeyBackup, importKeys } = require('../backup');
 
 const router = express.Router();
@@ -32,17 +32,16 @@ router.get('/users', adminRequired, (_req, res) => {
   res.json({ users });
 });
 
-// Change le rôle d'un utilisateur (admin/staff/reseller/user).
-// Réservé aux comptes 'admin' (pas 'staff') pour éviter l'auto-escalade.
-const ROLES = ['admin', 'staff', 'reseller', 'user'];
+// Change le rôle d'un utilisateur. Réservé aux owners (évite l'auto-escalade staff/admin).
+const ROLES = ['owner', 'admin', 'staff', 'reseller', 'user'];
 router.post('/users/:id/role', adminRequired, (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Réservé aux admins' });
+  if (!isOwner(req.user)) return res.status(403).json({ error: 'Réservé aux owners' });
   const role = String((req.body && req.body.role) || '').toLowerCase();
   if (!ROLES.includes(role)) return res.status(400).json({ error: 'Rôle invalide' });
   const target = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(req.params.id);
   if (!target) return res.status(404).json({ error: 'Utilisateur introuvable' });
-  if (target.id === req.user.id && role !== 'admin') {
-    return res.status(400).json({ error: 'Tu ne peux pas retirer ton propre accès admin' });
+  if (target.id === req.user.id && role !== 'owner' && role !== 'admin') {
+    return res.status(400).json({ error: 'Tu ne peux pas retirer ton propre accès' });
   }
   db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, target.id);
   res.json({ ok: true, user: db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(target.id) });
@@ -183,7 +182,7 @@ router.get('/downloads', adminRequired, (_req, res) => {
 /* ---- Resellers (rebrand : comptes qui génèrent leurs propres clés) ---- */
 
 // Liste des resellers + quota + conso + produits assignés
-router.get('/resellers', adminRequired, (_req, res) => {
+router.get('/resellers', ownerRequired, (_req, res) => {
   const resellers = db.prepare(`
     SELECT id, username, key_quota, banned, created_at
     FROM users WHERE role = 'reseller' ORDER BY id DESC
@@ -197,7 +196,7 @@ router.get('/resellers', adminRequired, (_req, res) => {
 });
 
 // Crée un compte reseller
-router.post('/resellers', adminRequired, (req, res) => {
+router.post('/resellers', ownerRequired, (req, res) => {
   const { username, password, key_quota = 0 } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username et password requis' });
   const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
@@ -209,7 +208,7 @@ router.post('/resellers', adminRequired, (req, res) => {
 });
 
 // Modifie quota / mot de passe
-router.patch('/resellers/:id', adminRequired, (req, res) => {
+router.patch('/resellers/:id', ownerRequired, (req, res) => {
   const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'reseller'").get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Reseller introuvable' });
   if (req.body.key_quota !== undefined) {
@@ -222,7 +221,7 @@ router.patch('/resellers/:id', adminRequired, (req, res) => {
 });
 
 // Suspend / réactive (banned)
-router.post('/resellers/:id/suspend', adminRequired, (req, res) => {
+router.post('/resellers/:id/suspend', ownerRequired, (req, res) => {
   const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'reseller'").get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Reseller introuvable' });
   const banned = user.banned ? 0 : 1;
@@ -232,7 +231,7 @@ router.post('/resellers/:id/suspend', adminRequired, (req, res) => {
 });
 
 // Supprime le compte reseller
-router.delete('/resellers/:id', adminRequired, (req, res) => {
+router.delete('/resellers/:id', ownerRequired, (req, res) => {
   const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'reseller'").get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Reseller introuvable' });
   db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
@@ -240,7 +239,7 @@ router.delete('/resellers/:id', adminRequired, (req, res) => {
 });
 
 // Assigne un produit au reseller
-router.post('/resellers/:id/products', adminRequired, (req, res) => {
+router.post('/resellers/:id/products', ownerRequired, (req, res) => {
   const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'reseller'").get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Reseller introuvable' });
   const productId = Number(req.body && req.body.product_id);
@@ -252,7 +251,7 @@ router.post('/resellers/:id/products', adminRequired, (req, res) => {
 });
 
 // Retire un produit assigné
-router.delete('/resellers/:id/products/:productId', adminRequired, (req, res) => {
+router.delete('/resellers/:id/products/:productId', ownerRequired, (req, res) => {
   db.prepare('DELETE FROM reseller_products WHERE user_id = ? AND product_id = ?')
     .run(req.params.id, req.params.productId);
   res.json({ ok: true });
