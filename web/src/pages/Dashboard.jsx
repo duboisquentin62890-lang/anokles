@@ -92,7 +92,7 @@ export default function Dashboard() {
   if (!loading && !user) return <Navigate to="/login" replace />;
   if (loading) return <div className="container section muted">Chargement…</div>;
 
-  const isStaff = user.role === 'admin' || user.role === 'staff';
+  const isStaff = user.role === 'owner' || user.role === 'admin' || user.role === 'staff' || user.is_owner;
   const linked = Boolean(user.discord_id);
 
   async function redeem(e) {

@@ -16,7 +16,8 @@ export default function Login() {
     setError('');
     try {
       const data = await login(username, password);
-      nav(data.user.role === 'admin' || data.user.role === 'staff' ? '/admin' : '/dashboard');
+      const staff = ['owner', 'admin', 'staff'].includes(data.user.role) || data.user.is_owner;
+      nav(staff ? '/admin' : '/dashboard');
     } catch (err) {
       setError(err.message);
     } finally {

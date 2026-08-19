@@ -19,7 +19,7 @@ function Ico({ d }) {
 export default function Nav() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
-  const isStaff = user && (user.role === 'admin' || user.role === 'staff');
+  const isStaff = user && (user.role === 'owner' || user.role === 'admin' || user.role === 'staff' || user.is_owner);
   const isReseller = user && user.role === 'reseller';
 
   return (
