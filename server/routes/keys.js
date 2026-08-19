@@ -329,9 +329,33 @@ router.post('/verify', (req, res) => {
   }
 
   const product = db.prepare('SELECT id, name, slug FROM products WHERE id = ?').get(row.product_id);
+
+  // Tous les produits que ce COMPTE possède : soit claim sur le compte (redeemed_by),
+  // soit activés sur cette machine (même hwid). Le loader débloque tous ces produits,
+  // pas seulement celui de la clé entrée. Lecture seule — ne modifie aucun produit.
+  const owned = db.prepare(`
+    SELECT p.slug AS slug, p.name AS name, MAX(k.expires_at) AS expires_at
+    FROM license_keys k
+    JOIN products p ON p.id = k.product_id
+    WHERE k.status = 'active'
+      AND (k.expires_at IS NULL OR k.expires_at > datetime('now'))
+      AND (
+        (? IS NOT NULL AND k.redeemed_by = ?)
+        OR k.hwid = ?
+      )
+    GROUP BY p.id, p.slug, p.name
+  `).all(row.redeemed_by ?? null, row.redeemed_by ?? null, hwid);
+
+  // garantit que le produit de la clé entrée figure toujours dans la liste
+  const products = owned.slice();
+  if (product && !products.some((x) => x.slug === product.slug)) {
+    products.push({ slug: product.slug, name: product.name, expires_at: row.expires_at });
+  }
+
   return res.json({
     valid: true,
     product,
+    products,
     duration_days: row.duration_days,
     expires_at: row.expires_at,
     hwid: row.hwid,
